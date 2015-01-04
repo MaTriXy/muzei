@@ -21,19 +21,15 @@ import android.graphics.BitmapRegionDecoder;
 import android.graphics.Matrix;
 import android.graphics.Rect;
 
-import com.google.android.apps.muzei.util.LogUtil;
-
 import java.io.IOException;
 import java.io.InputStream;
 
 import static android.graphics.BitmapFactory.Options;
-import static com.google.android.apps.muzei.util.LogUtil.LOGE;
 
 /**
  * Wrapper for {@link BitmapRegionDecoder} with some extra functionality.
  */
 public class BitmapRegionLoader {
-    private static final String TAG = LogUtil.makeLogTag(BitmapRegionLoader.class);
     private boolean mValid = false;
     private int mRotation = 0;
     private int mOriginalWidth;
@@ -43,11 +39,11 @@ public class BitmapRegionLoader {
     private volatile BitmapRegionDecoder mBitmapRegionDecoder;
     private Matrix mRotateMatrix;
 
-    public static BitmapRegionLoader newInstance(InputStream in) {
+    public static BitmapRegionLoader newInstance(InputStream in) throws IOException {
         return newInstance(in, 0);
     }
 
-    public static BitmapRegionLoader newInstance(InputStream in, int rotation) {
+    public static BitmapRegionLoader newInstance(InputStream in, int rotation) throws IOException {
         if (in == null) {
             return null;
         }
@@ -65,20 +61,18 @@ public class BitmapRegionLoader {
         return null;
     }
 
-    private BitmapRegionLoader(InputStream in) {
+    private BitmapRegionLoader(InputStream in) throws IOException {
         mInputStream = in;
-        try {
-            mBitmapRegionDecoder = BitmapRegionDecoder.newInstance(in, false);
+        mBitmapRegionDecoder = BitmapRegionDecoder.newInstance(in, false);
+        if (mBitmapRegionDecoder != null) {
             mOriginalWidth = mBitmapRegionDecoder.getWidth();
             mOriginalHeight = mBitmapRegionDecoder.getHeight();
             mValid = true;
-        } catch (IOException e) {
-            LOGE(TAG, "Couldn't create bitmap loader.", e);
         }
     }
 
     /**
-     * Key difference, aside from support for ration, from
+     * Key difference, aside from support for rotation, from
      * {@link BitmapRegionDecoder#decodeRegion(Rect, Options)} in this implementation is that even
      * if <code>inBitmap</code> is given, a sub-bitmap might be returned.
      */
@@ -116,6 +110,10 @@ public class BitmapRegionLoader {
         }
 
         Bitmap bitmap = mBitmapRegionDecoder.decodeRegion(mTempRect, options);
+        if (bitmap == null) {
+            return null;
+        }
+
         if (options != null && options.inBitmap != null &&
                 ((mTempRect.width() != unsampledInBitmapWidth
                         || mTempRect.height() != unsampledInBitmapHeight))) {
@@ -124,7 +122,7 @@ public class BitmapRegionLoader {
                     bitmap, 0, 0,
                     mTempRect.width() / sampleSize,
                     mTempRect.height() / sampleSize);
-            if (bitmap != options.inBitmap) {
+            if (bitmap != options.inBitmap && bitmap != subBitmap) {
                 bitmap.recycle();
             }
             bitmap = subBitmap;
@@ -132,10 +130,11 @@ public class BitmapRegionLoader {
 
         if (mRotateMatrix != null) {
             // Rotate decoded bitmap
-            Bitmap rotatedBitmap = Bitmap.createBitmap(bitmap, 0, 0,
+            Bitmap rotatedBitmap = Bitmap.createBitmap(
+                    bitmap, 0, 0,
                     bitmap.getWidth(), bitmap.getHeight(),
                     mRotateMatrix, true);
-            if (options == null || bitmap != options.inBitmap) {
+            if ((options == null || bitmap != options.inBitmap) && bitmap != rotatedBitmap) {
                 bitmap.recycle();
             }
             bitmap = rotatedBitmap;

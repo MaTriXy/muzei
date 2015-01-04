@@ -17,23 +17,24 @@
 package com.google.android.apps.muzei.settings;
 
 import android.animation.ObjectAnimator;
-import android.app.Activity;
 import android.app.Fragment;
 import android.app.FragmentManager;
 import android.app.FragmentTransaction;
+import android.app.Notification;
 import android.content.ActivityNotFoundException;
 import android.content.Context;
 import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.content.pm.ResolveInfo;
+import android.graphics.Rect;
 import android.net.Uri;
 import android.os.Bundle;
+import android.support.v7.app.ActionBarActivity;
+import android.support.v7.widget.Toolbar;
 import android.view.LayoutInflater;
-import android.view.Menu;
 import android.view.MenuItem;
 import android.view.View;
 import android.view.ViewGroup;
-import android.view.Window;
 import android.widget.AdapterView;
 import android.widget.BaseAdapter;
 import android.widget.Spinner;
@@ -42,6 +43,7 @@ import android.widget.Toast;
 
 import com.google.android.apps.muzei.event.WallpaperActiveStateChangedEvent;
 import com.google.android.apps.muzei.render.MuzeiRendererFragment;
+import com.google.android.apps.muzei.util.DrawInsetsFrameLayout;
 import com.google.android.apps.muzei.util.LogUtil;
 
 import net.nurik.roman.muzei.R;
@@ -52,7 +54,8 @@ import de.greenrobot.event.EventBus;
  * The primary widget configuration activity. Serves as an interstitial when adding the widget, and
  * shows when pressing the settings button in the widget.
  */
-public class SettingsActivity extends Activity implements SettingsChooseSourceFragment.Callbacks {
+public class SettingsActivity extends ActionBarActivity
+        implements SettingsChooseSourceFragment.Callbacks {
     private static final String TAG = LogUtil.makeLogTag(SettingsActivity.class);
 
     public static final String EXTRA_START_SECTION =
@@ -76,20 +79,42 @@ public class SettingsActivity extends Activity implements SettingsChooseSourceFr
 
     private int mStartSection = START_SECTION_SOURCE;
 
+    private Toolbar mAppBar;
+
     private ObjectAnimator mBackgroundAnimator;
-    private View mContainerView;
     private boolean mPaused;
     private boolean mRenderLocally;
 
     public void onCreate(Bundle savedInstanceState) {
-        requestWindowFeature(Window.FEATURE_ACTION_BAR);
         super.onCreate(savedInstanceState);
-
+        getWindow().getDecorView().setSystemUiVisibility(
+                View.SYSTEM_UI_FLAG_LAYOUT_FULLSCREEN
+                        | View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION
+                        | View.SYSTEM_UI_FLAG_LAYOUT_STABLE);
         setContentView(R.layout.settings_activity);
-        mContainerView = findViewById(R.id.content_container);
+
+        if (getIntent() != null && getIntent().getCategories() != null &&
+                getIntent().getCategories().contains(Notification.INTENT_CATEGORY_NOTIFICATION_PREFERENCES)) {
+            mStartSection = START_SECTION_ADVANCED;
+        }
 
         // Set up UI widgets
-        setupActionBar();
+        setupAppBar();
+
+        ((DrawInsetsFrameLayout) findViewById(R.id.draw_insets_frame_layout)).setOnInsetsCallback(
+                new DrawInsetsFrameLayout.OnInsetsCallback() {
+                    @Override
+                    public void onInsetsChanged(Rect insets) {
+                        View container = findViewById(R.id.container);
+                        ViewGroup.MarginLayoutParams lp = (ViewGroup.MarginLayoutParams)
+                                container.getLayoutParams();
+                        lp.leftMargin = insets.left;
+                        lp.topMargin = insets.top;
+                        lp.rightMargin = insets.right;
+                        lp.bottomMargin = insets.bottom;
+                        container.setLayoutParams(lp);
+                    }
+                });
 
         if (mBackgroundAnimator != null) {
             mBackgroundAnimator.cancel();
@@ -112,18 +137,17 @@ public class SettingsActivity extends Activity implements SettingsChooseSourceFr
         EventBus.getDefault().unregister(this);
     }
 
-    private void setupActionBar() {
-        final LayoutInflater inflater = getLayoutInflater();
-        View navContainerView = inflater.inflate(R.layout.settings_include_actionbar_nav, null);
-        navContainerView.findViewById(R.id.actionbar_done).setOnClickListener(
-                new View.OnClickListener() {
-                    @Override
-                    public void onClick(View v) {
-                        finish();
-                    }
-                });
+    private void setupAppBar() {
+        mAppBar = (Toolbar) findViewById(R.id.app_bar);
+        mAppBar.setNavigationOnClickListener(new View.OnClickListener() {
+            @Override
+            public void onClick(View view) {
+                onNavigateUp();
+            }
+        });
 
-        Spinner sectionSpinner = (Spinner) navContainerView.findViewById(R.id.section_spinner);
+        final LayoutInflater inflater = LayoutInflater.from(this);
+        Spinner sectionSpinner = (Spinner) findViewById(R.id.section_spinner);
         sectionSpinner.setAdapter(new BaseAdapter() {
             @Override
             public int getCount() {
@@ -173,6 +197,8 @@ public class SettingsActivity extends Activity implements SettingsChooseSourceFr
                     return;
                 }
 
+                inflateMenuFromFragment(0);
+
                 try {
                     Fragment newFragment = fragmentClass.newInstance();
                     getFragmentManager().beginTransaction()
@@ -180,9 +206,7 @@ public class SettingsActivity extends Activity implements SettingsChooseSourceFr
                             .setTransitionStyle(R.style.Muzei_SimpleFadeFragmentAnimation)
                             .replace(R.id.content_container, newFragment)
                             .commitAllowingStateLoss();
-                } catch (InstantiationException e) {
-                    throw new RuntimeException(e);
-                } catch (IllegalAccessException e) {
+                } catch (InstantiationException | IllegalAccessException e) {
                     throw new RuntimeException(e);
                 }
             }
@@ -194,7 +218,51 @@ public class SettingsActivity extends Activity implements SettingsChooseSourceFr
 
         sectionSpinner.setSelection(mStartSection);
 
-        getActionBar().setCustomView(navContainerView);
+        inflateMenuFromFragment(0);
+        mAppBar.setOnMenuItemClickListener(new Toolbar.OnMenuItemClickListener() {
+            @Override
+            public boolean onMenuItemClick(MenuItem item) {
+                switch (item.getItemId()) {
+                    case R.id.action_get_more_sources:
+                        try {
+                            Intent playStoreIntent = new Intent(Intent.ACTION_VIEW,
+                                    Uri.parse("http://play.google.com/store/search?q=Muzei&c=apps"))
+                                    .addFlags(Intent.FLAG_ACTIVITY_NEW_DOCUMENT);
+                            preferPackageForIntent(SettingsActivity.this,
+                                    playStoreIntent, PLAY_STORE_PACKAGE_NAME);
+                            startActivity(playStoreIntent);
+                        } catch (ActivityNotFoundException activityNotFoundException1) {
+                            Toast.makeText(SettingsActivity.this,
+                                    R.string.play_store_not_found, Toast.LENGTH_LONG).show();
+                        }
+                        return true;
+
+                    case R.id.action_about:
+                        startActivity(new Intent(SettingsActivity.this, AboutActivity.class));
+                        return true;
+                }
+
+                Fragment currentFragment = getFragmentManager().findFragmentById(
+                        R.id.content_container);
+                if (currentFragment != null
+                        && currentFragment instanceof SettingsActivityMenuListener) {
+                    ((SettingsActivityMenuListener) currentFragment)
+                            .onSettingsActivityMenuItemClick(item);
+                }
+
+                return false;
+            }
+        });
+    }
+
+    public static void preferPackageForIntent(Context context, Intent intent, String packageName) {
+        PackageManager pm = context.getPackageManager();
+        for (ResolveInfo resolveInfo : pm.queryIntentActivities(intent, 0)) {
+            if (resolveInfo.activityInfo.packageName.equals(packageName)) {
+                intent.setPackage(packageName);
+                break;
+            }
+        }
     }
 
     @Override
@@ -219,8 +287,8 @@ public class SettingsActivity extends Activity implements SettingsChooseSourceFr
     }
 
     private void updateRenderLocallyToLatestActiveState() {
-        WallpaperActiveStateChangedEvent e = (WallpaperActiveStateChangedEvent)
-                EventBus.getDefault().getStickyEvent(WallpaperActiveStateChangedEvent.class);
+        WallpaperActiveStateChangedEvent e = EventBus.getDefault().getStickyEvent(
+                WallpaperActiveStateChangedEvent.class);
         if (e != null) {
             onEventMainThread(e);
         } else {
@@ -235,6 +303,7 @@ public class SettingsActivity extends Activity implements SettingsChooseSourceFr
 
         mRenderLocally = renderLocally;
 
+        final View uiContainer = findViewById(R.id.container);
         final ViewGroup localRenderContainer = (ViewGroup)
                 findViewById(R.id.local_render_container);
 
@@ -255,6 +324,7 @@ public class SettingsActivity extends Activity implements SettingsChooseSourceFr
                     .alpha(1)
                     .setDuration(2000)
                     .withEndAction(null);
+            uiContainer.setBackgroundColor(0x00000000); // for ripple touch feedback
         } else {
             if (localRenderFragment != null) {
                 fm.beginTransaction()
@@ -270,50 +340,28 @@ public class SettingsActivity extends Activity implements SettingsChooseSourceFr
                             localRenderContainer.setVisibility(View.GONE);
                         }
                     });
+            uiContainer.setBackground(null);
         }
-    }
-
-    @Override
-    public boolean onCreateOptionsMenu(Menu menu) {
-        super.onCreateOptionsMenu(menu);
-        getMenuInflater().inflate(R.menu.settings, menu);
-        return true;
-    }
-
-    public static void preferPackageForIntent(Context context, Intent intent, String packageName) {
-        PackageManager pm = context.getPackageManager();
-        for (ResolveInfo resolveInfo : pm.queryIntentActivities(intent, 0)) {
-            if (resolveInfo.activityInfo.packageName.equals(packageName)) {
-                intent.setPackage(packageName);
-                break;
-            }
-        }
-    }
-
-    @Override
-    public boolean onOptionsItemSelected(MenuItem item) {
-        switch (item.getItemId()) {
-            case R.id.action_get_more_sources:
-                try {
-                    Intent playStoreIntent = new Intent(Intent.ACTION_VIEW,
-                            Uri.parse("http://play.google.com/store/search?q=Muzei&c=apps"))
-                            .addFlags(Intent.FLAG_ACTIVITY_CLEAR_WHEN_TASK_RESET);
-                    preferPackageForIntent(this, playStoreIntent, PLAY_STORE_PACKAGE_NAME);
-                    startActivity(playStoreIntent);
-                } catch (ActivityNotFoundException activityNotFoundException1) {
-                    Toast.makeText(this, R.string.play_store_not_found, Toast.LENGTH_LONG).show();
-                }
-                return true;
-
-            case R.id.action_about:
-                startActivity(new Intent(this, AboutActivity.class));
-                return true;
-        }
-        return super.onOptionsItemSelected(item);
     }
 
     @Override
     public void onRequestCloseActivity() {
         finish();
+    }
+
+    void inflateMenuFromFragment(int menuResId) {
+        if (mAppBar == null) {
+            return;
+        }
+
+        mAppBar.getMenu().clear();
+        if (menuResId != 0) {
+            mAppBar.inflateMenu(menuResId);
+        }
+        mAppBar.inflateMenu(R.menu.settings);
+    }
+
+    public static interface SettingsActivityMenuListener {
+        public void onSettingsActivityMenuItemClick(MenuItem item);
     }
 }

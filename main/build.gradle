@@ -19,11 +19,11 @@ buildscript {
         mavenCentral()
     }
     dependencies {
-        classpath 'com.android.tools.build:gradle:0.12.+'
+        classpath 'com.android.tools.build:gradle:1.0.0'
     }
 }
 
-apply plugin: 'android'
+apply plugin: 'com.android.application'
 
 project.archivesBaseName = "muzei"
 
@@ -31,26 +31,18 @@ repositories {
     mavenCentral()
 }
 
-dependencies {
-    compile 'com.squareup.okhttp:okhttp:1.2.1'
-    compile 'com.squareup.picasso:picasso:2.1.1'
-    compile ('de.greenrobot:eventbus:2.2.0') {
-        exclude group:'com.google.android', module: 'support-v4' // already included below
-    }
-    compile 'com.android.support:support-v4:19.0.+'
-    compile project(':api')
-}
-
 android {
-    compileSdkVersion 20
-    buildToolsVersion "19.1.0"
+    compileSdkVersion 21
+    buildToolsVersion "21.1.1"
 
     def Properties versionProps = new Properties()
     versionProps.load(new FileInputStream(file('version.properties')))
 
     defaultConfig {
         minSdkVersion 17
-        targetSdkVersion 19
+        targetSdkVersion 21
+        renderscriptTargetApi 21
+        renderscriptSupportModeEnabled true
 
         versionName versionProps['name']
         versionCode versionProps['code'].toInteger()
@@ -61,25 +53,45 @@ android {
             def Properties localProps = new Properties()
             localProps.load(new FileInputStream(file('../local.properties')))
             def Properties keyProps = new Properties()
-            assert localProps['keystore.props.file'];
-            keyProps.load(new FileInputStream(file(localProps['keystore.props.file'])))
-            storeFile file(keyProps["store"])
+            if (localProps['keystore.props.file'] != null) {
+                keyProps.load(new FileInputStream(file(localProps['keystore.props.file'])))
+            }
+            storeFile keyProps["store"] != null ? file(keyProps["store"]) : null
             keyAlias keyProps["alias"]
             storePassword keyProps["storePass"]
             keyPassword keyProps["pass"]
         }
     }
 
+    productFlavors {
+        dev {
+            // dev utilizes minSDKVersion = 21 to allow the Android gradle plugin
+            // to pre-dex each module and produce an APK that can be tested on
+            // Android Lollipop without time consuming dex merging processes.
+            minSdkVersion 21
+            multiDexEnabled true
+        }
+
+        prod {
+        }
+    }
+
     buildTypes {
+        debug {
+            versionNameSuffix " Debug"
+        }
+
         release {
-            runProguard true
+            minifyEnabled true
+            shrinkResources true
             proguardFiles getDefaultProguardFile('proguard-android.txt'), file('proguard-project.txt')
             signingConfig signingConfigs.release
         }
 
         publicBeta.initWith(buildTypes.release)
         publicBeta {
-            runProguard true
+            minifyEnabled true
+            shrinkResources true
             proguardFiles getDefaultProguardFile('proguard-android.txt'), file('proguard-project.txt')
             versionNameSuffix " " + versionProps['betaNumber']
         }
@@ -87,9 +99,32 @@ android {
         publicDebug.initWith(buildTypes.publicBeta)
         publicDebug {
             debuggable true
-            runProguard true
+            renderscriptDebuggable true
+            minifyEnabled true
+            shrinkResources true
             proguardFiles getDefaultProguardFile('proguard-android.txt'), file('proguard-project.txt')
             versionNameSuffix " Debug " + versionProps['betaNumber']
         }
     }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_1_7
+        targetCompatibility JavaVersion.VERSION_1_7
+    }
+}
+
+dependencies {
+    compile 'com.squareup.okhttp:okhttp:2.1.0'
+    compile 'com.squareup.okhttp:okhttp-urlconnection:2.1.0'
+    compile 'com.squareup.picasso:picasso:2.4.0'
+    compile 'com.google.android.gms:play-services-wearable:6.5.87'
+    compile 'de.greenrobot:eventbus:2.4.0'
+    compile 'com.android.support:appcompat-v7:21.0.3'
+    compile 'com.android.support:recyclerview-v7:21.0.2'
+
+    // :api is included as a transitive dependency from :android-client-common
+    // compile project(':api')
+    compile project(':android-client-common')
+    devWearApp project(path: ':wearable', configuration: 'devRelease')
+    prodWearApp project(path: ':wearable', configuration: 'prodRelease')
 }

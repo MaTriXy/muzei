@@ -23,9 +23,12 @@ import com.google.android.apps.muzei.ArtworkCache;
 import com.google.android.apps.muzei.NewWallpaperNotificationReceiver;
 import com.google.android.apps.muzei.SourceManager;
 import com.google.android.apps.muzei.TaskQueueService;
+import com.google.android.apps.muzei.WearableController;
 import com.google.android.apps.muzei.api.Artwork;
+import com.google.android.apps.muzei.api.MuzeiContract;
 import com.google.android.apps.muzei.api.internal.SourceState;
 import com.google.android.apps.muzei.event.CurrentArtworkDownloadedEvent;
+import com.google.android.apps.muzei.provider.MuzeiProvider;
 import com.google.android.apps.muzei.util.LogUtil;
 
 import java.io.File;
@@ -45,6 +48,9 @@ public class RealRenderController extends RenderController {
     public RealRenderController(Context context, MuzeiBlurRenderer renderer,
             Callbacks callbacks) {
         super(context, renderer, callbacks);
+        if (MuzeiContract.Artwork.getCurrentArtwork(context) == null) {
+            reloadCurrentArtwork(true);
+        }
     }
 
     public void onEventMainThread(CurrentArtworkDownloadedEvent e) {
@@ -99,12 +105,16 @@ public class RealRenderController extends RenderController {
         try {
             BitmapRegionLoader loader = BitmapRegionLoader.newInstance(
                     new FileInputStream(file), rotation);
+            if (MuzeiProvider.saveCurrentArtworkLocation(mContext, file)) {
+                mContext.getContentResolver().insert(MuzeiContract.Artwork.CONTENT_URI, currentArtwork.toContentValues());
+            }
             NewWallpaperNotificationReceiver
                     .maybeShowNewArtworkNotification(mContext, currentArtwork, loader);
+            WearableController.updateDataLayer(mContext, currentArtwork, loader);
             mLastLoadedPath = file.getAbsolutePath();
             return loader;
-        } catch (FileNotFoundException e) {
-            LOGE(TAG, "Couldn't load artwork: " + file.getAbsolutePath(), e);
+        } catch (IOException e) {
+            LOGE(TAG, "Error loading image: " + file.getAbsolutePath() + " from " + currentArtwork.getImageUri(), e);
             return null;
         }
     }

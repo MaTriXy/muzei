@@ -19,7 +19,6 @@ package com.google.android.apps.muzei;
 import android.animation.AnimatorSet;
 import android.animation.ObjectAnimator;
 import android.annotation.TargetApi;
-import android.app.Activity;
 import android.app.Fragment;
 import android.app.FragmentManager;
 import android.app.WallpaperManager;
@@ -33,8 +32,10 @@ import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
 import android.preference.PreferenceManager;
+import android.support.v7.app.ActionBarActivity;
 import android.util.SparseIntArray;
 import android.util.TypedValue;
+import android.view.Gravity;
 import android.view.KeyEvent;
 import android.view.LayoutInflater;
 import android.view.MenuItem;
@@ -65,6 +66,7 @@ import com.google.android.apps.muzei.util.CheatSheet;
 import com.google.android.apps.muzei.util.DrawInsetsFrameLayout;
 import com.google.android.apps.muzei.util.LogUtil;
 import com.google.android.apps.muzei.util.PanScaleProxyView;
+import com.google.android.apps.muzei.util.ScrimUtil;
 import com.google.android.apps.muzei.util.TypefaceUtil;
 
 import net.nurik.roman.muzei.R;
@@ -73,7 +75,7 @@ import de.greenrobot.event.EventBus;
 
 import static com.google.android.apps.muzei.util.LogUtil.LOGE;
 
-public class MuzeiActivity extends Activity {
+public class MuzeiActivity extends ActionBarActivity {
     private static final String TAG = LogUtil.makeLogTag(MuzeiActivity.class);
 
     private static final String PREF_SEEN_TUTORIAL = "seen_tutorial";
@@ -123,6 +125,7 @@ public class MuzeiActivity extends Activity {
 
     // Normal mode UI
     private View mChromeContainerView;
+    private View mStatusBarScrimView;
     private View mMetadataView;
     private View mLoadingContainerView;
     private View mLoadErrorContainerView;
@@ -167,6 +170,8 @@ public class MuzeiActivity extends Activity {
                 }
             }
         });
+
+        showHideChrome(true);
 
         mSourceManager = SourceManager.getInstance(this);
 
@@ -415,6 +420,18 @@ public class MuzeiActivity extends Activity {
 
     private void setupArtDetailModeUi() {
         mChromeContainerView = findViewById(R.id.chrome_container);
+        mStatusBarScrimView = findViewById(R.id.statusbar_scrim);
+
+        mChromeContainerView.setBackground(ScrimUtil.makeCubicGradientScrimDrawable(
+                0xaa000000, 8, Gravity.BOTTOM));
+
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.LOLLIPOP) {
+            mStatusBarScrimView.setVisibility(View.GONE);
+            mStatusBarScrimView = null;
+        } else {
+            mStatusBarScrimView.setBackground(ScrimUtil.makeCubicGradientScrimDrawable(
+                    0x44000000, 8, Gravity.TOP));
+        }
 
         mMetadataView = findViewById(R.id.metadata);
 
@@ -429,8 +446,9 @@ public class MuzeiActivity extends Activity {
                             mGestureFlagSystemUiBecameVisible = true;
                         }
 
+                        boolean showArtDetailChrome = (mUiMode == UI_MODE_ART_DETAIL);
                         mChromeContainerView.setVisibility(
-                                (mUiMode != UI_MODE_ART_DETAIL) ? View.GONE : View.VISIBLE);
+                                showArtDetailChrome ? View.VISIBLE : View.GONE);
                         mChromeContainerView.animate()
                                 .alpha(visible ? 1f : 0f)
                                 .translationY(visible ? 0 : metadataSlideDistance)
@@ -443,6 +461,22 @@ public class MuzeiActivity extends Activity {
                                         }
                                     }
                                 });
+
+                        if (mStatusBarScrimView != null) {
+                            mStatusBarScrimView.setVisibility(
+                                    showArtDetailChrome ? View.VISIBLE : View.GONE);
+                            mStatusBarScrimView.animate()
+                                    .alpha(visible ? 1f : 0f)
+                                    .setDuration(200)
+                                    .withEndAction(new Runnable() {
+                                        @Override
+                                        public void run() {
+                                            if (!visible) {
+                                                mStatusBarScrimView.setVisibility(View.GONE);
+                                            }
+                                        }
+                                    });
+                        }
                     }
                 });
 
@@ -504,7 +538,7 @@ public class MuzeiActivity extends Activity {
                             return;
                         }
 
-                        showHideChrome(zoomedOut);
+                        //showHideChrome(zoomedOut);
                     }
                 });
 
@@ -554,8 +588,7 @@ public class MuzeiActivity extends Activity {
 
                 switch (menuItem.getItemId()) {
                     case R.id.action_settings:
-                        startActivity(new Intent(MuzeiActivity.this, SettingsActivity.class)
-                                .addFlags(Intent.FLAG_ACTIVITY_CLEAR_WHEN_TASK_RESET));
+                        startActivity(new Intent(MuzeiActivity.this, SettingsActivity.class));
                         return true;
                 }
                 return false;
@@ -591,11 +624,7 @@ public class MuzeiActivity extends Activity {
                         viewIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
                         try {
                             startActivity(viewIntent);
-                        } catch (ActivityNotFoundException e) {
-                            Toast.makeText(MuzeiActivity.this, R.string.error_view_details,
-                                    Toast.LENGTH_SHORT).show();
-                            LOGE(TAG, "Error viewing artwork details.", e);
-                        } catch (SecurityException e) {
+                        } catch (ActivityNotFoundException | SecurityException e) {
                             Toast.makeText(MuzeiActivity.this, R.string.error_view_details,
                                     Toast.LENGTH_SHORT).show();
                             LOGE(TAG, "Error viewing artwork details.", e);
@@ -734,15 +763,6 @@ public class MuzeiActivity extends Activity {
         mPaused = false;
         mConsecutiveLoadErrorCount = 0;
 
-        mChromeContainerView.setVisibility((mUiMode == UI_MODE_ART_DETAIL)
-                ? View.VISIBLE : View.GONE);
-        if (mUiMode == UI_MODE_ART_DETAIL) {
-            mChromeContainerView.setAlpha(0);
-            mChromeContainerView.animate().alpha(1).setDuration(1000);
-        } else {
-            mChromeContainerView.setAlpha(1);
-        }
-
         // update intro mode UI to latest wallpaper active state
         WallpaperActiveStateChangedEvent e = EventBus.getDefault()
                 .getStickyEvent(WallpaperActiveStateChangedEvent.class);
@@ -753,6 +773,25 @@ public class MuzeiActivity extends Activity {
         }
 
         updateUiMode();
+        mChromeContainerView.setVisibility((mUiMode == UI_MODE_ART_DETAIL)
+                ? View.VISIBLE : View.GONE);
+        if (mStatusBarScrimView != null) {
+            mStatusBarScrimView.setVisibility((mUiMode == UI_MODE_ART_DETAIL)
+                    ? View.VISIBLE : View.GONE);
+        }
+
+        // Note: normally should use window animations for this, but there's a bug
+        // on Samsung devices where the wallpaper is animated along with the window for
+        // windows showing the wallpaper (the wallpaper _should_ be static, not part of
+        // the animation).
+        View decorView = getWindow().getDecorView();
+        decorView.setAlpha(0f);
+        decorView.animate().cancel();
+        decorView.animate()
+                .setStartDelay(500)
+                .alpha(1f)
+                .setDuration(300);
+
         maybeUpdateArtDetailOpenedClosed();
 
         NewWallpaperNotificationReceiver.markNotificationRead(this);

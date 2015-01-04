@@ -16,6 +16,7 @@
 
 package com.google.android.apps.muzei.featuredart;
 
+import android.content.ActivityNotFoundException;
 import android.content.ComponentName;
 import android.content.Intent;
 import android.net.Uri;
@@ -54,8 +55,10 @@ public class FeaturedArtSource extends RemoteMuzeiArtSource {
     private static final String SOURCE_NAME = "FeaturedArt";
 
     private static final String QUERY_URL = "http://muzeiapi.appspot.com/featured?cachebust=1";
+    private static final Uri ARCHIVE_URI = Uri.parse("http://muzei.co/archive");
 
     private static final int COMMAND_ID_SHARE = 1;
+    private static final int COMMAND_ID_VIEW_ARCHIVE = 2;
     private static final int COMMAND_ID_DEBUG_INFO = 51;
 
     private static final int MAX_JITTER_MILLIS = 20 * 60 * 1000;
@@ -76,7 +79,7 @@ public class FeaturedArtSource extends RemoteMuzeiArtSource {
 
     @Override
     protected void onUpdate(int reason) {
-        List<UserCommand> commands = new ArrayList<UserCommand>();
+        List<UserCommand> commands = new ArrayList<>();
         if (reason == UPDATE_REASON_INITIAL) {
             // Show initial photo (starry night)
             publishArtwork(new Artwork.Builder()
@@ -97,6 +100,8 @@ public class FeaturedArtSource extends RemoteMuzeiArtSource {
         }
 
         commands.add(new UserCommand(COMMAND_ID_SHARE, getString(R.string.action_share_artwork)));
+        commands.add(new UserCommand(COMMAND_ID_VIEW_ARCHIVE,
+                getString(R.string.featuredart_source_action_view_archive)));
         if (BuildConfig.DEBUG) {
             commands.add(new UserCommand(COMMAND_ID_DEBUG_INFO, "Debug info"));
         }
@@ -150,6 +155,15 @@ public class FeaturedArtSource extends RemoteMuzeiArtSource {
             shareIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
             startActivity(shareIntent);
 
+        } else if (COMMAND_ID_VIEW_ARCHIVE == id) {
+            Intent viewArchiveIntent = new Intent(Intent.ACTION_VIEW, ARCHIVE_URI);
+            viewArchiveIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+
+            try {
+                startActivity(viewArchiveIntent);
+            } catch (ActivityNotFoundException ignored) {
+            }
+
         } else if (COMMAND_ID_DEBUG_INFO == id) {
             long nextUpdateTimeMillis = getSharedPreferences()
                     .getLong("scheduled_update_time_millis", 0);
@@ -180,10 +194,7 @@ public class FeaturedArtSource extends RemoteMuzeiArtSource {
         try {
             jsonObject = IOUtil.fetchJsonObject(QUERY_URL);
             artwork = Artwork.fromJson(jsonObject);
-        } catch (JSONException e) {
-            LOGE(TAG, "Error reading JSON", e);
-            throw new RetryException(e);
-        } catch (IOException e) {
+        } catch (JSONException | IOException e) {
             LOGE(TAG, "Error reading JSON", e);
             throw new RetryException(e);
         }
@@ -207,13 +218,13 @@ public class FeaturedArtSource extends RemoteMuzeiArtSource {
             }
             try {
                 nextTime = sDateFormatTZ.parse(nextTimeStr);
-            } catch (ParseException ignored) {
+            } catch (ParseException e) {
                 try {
                     sDateFormatLocal.setTimeZone(TimeZone.getDefault());
                     nextTime = sDateFormatLocal.parse(nextTimeStr);
-                } catch (ParseException e) {
+                } catch (ParseException e2) {
                     LOGE(TAG, "Can't schedule update; "
-                            + "invalid date format '" + nextTimeStr + "'", e);
+                            + "invalid date format '" + nextTimeStr + "'", e2);
                 }
             }
         }
