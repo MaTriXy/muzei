@@ -21,15 +21,12 @@ import android.animation.AnimatorListenerAdapter;
 import android.animation.ObjectAnimator;
 import android.content.Context;
 import android.os.Handler;
-
-import com.google.android.apps.muzei.util.LogUtil;
+import android.util.Log;
 
 import java.io.IOException;
 
-import static com.google.android.apps.muzei.util.LogUtil.LOGE;
-
 public class DemoRenderController extends RenderController {
-    private static final String TAG = LogUtil.makeLogTag(DemoRenderController.class);
+    private static final String TAG = "DemoRenderController";
 
     private final Handler mHandler = new Handler();
 
@@ -87,6 +84,7 @@ public class DemoRenderController extends RenderController {
         super.destroy();
         if (mCurrentScrollAnimator != null) {
             mCurrentScrollAnimator.cancel();
+            mCurrentScrollAnimator.removeAllListeners();
         }
         mHandler.removeCallbacksAndMessages(null);
     }
@@ -96,7 +94,7 @@ public class DemoRenderController extends RenderController {
         try {
             return BitmapRegionLoader.newInstance(mContext.getAssets().open("starrynight.jpg"));
         } catch (IOException e) {
-            LOGE(TAG, "Error opening demo image.", e);
+            Log.e(TAG, "Error opening demo image.", e);
             return null;
         }
     }

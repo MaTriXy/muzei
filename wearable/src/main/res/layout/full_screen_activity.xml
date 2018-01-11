@@ -14,7 +14,7 @@
   limitations under the License.
   -->
 
-<android.support.wearable.view.BoxInsetLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<android.support.wear.widget.BoxInsetLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
@@ -50,7 +50,7 @@
         android:gravity="bottom"
         android:id="@+id/metadata_container"
         android:alpha="0"
-        app:layout_box="all">
+        app:boxedEdges="all">
 
         <com.google.android.apps.muzei.util.ShadowDipsTextView
             android:id="@+id/title"
@@ -61,6 +61,8 @@
             android:paddingEnd="@dimen/art_detail_metadata_margin"
             android:paddingStart="@dimen/art_detail_metadata_margin"
             android:paddingTop="@dimen/art_detail_metadata_margin"
+            android:fontFamily="@font/alegreya"
+            android:textStyle="bold|italic"
             android:textColor="#fff"
             android:textSize="@dimen/art_detail_title_text_size"
             app:shadowColor="#8000"
@@ -75,6 +77,8 @@
             android:paddingBottom="@dimen/art_detail_metadata_margin_bottom"
             android:paddingEnd="@dimen/art_detail_metadata_margin"
             android:paddingStart="@dimen/art_detail_metadata_margin"
+            android:fontFamily="@font/alegreya"
+            android:textStyle="italic"
             android:textColor="#fff"
             android:textSize="@dimen/art_detail_byline_text_size"
             app:shadowColor="#8000"
@@ -87,4 +91,4 @@
         android:id="@+id/dismiss_overlay"
         android:layout_width="match_parent"
         android:layout_height="match_parent" />
-</android.support.wearable.view.BoxInsetLayout>
+</android.support.wear.widget.BoxInsetLayout>

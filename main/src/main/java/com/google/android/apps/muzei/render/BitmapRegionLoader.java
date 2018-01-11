@@ -67,7 +67,9 @@ public class BitmapRegionLoader {
         if (mBitmapRegionDecoder != null) {
             mOriginalWidth = mBitmapRegionDecoder.getWidth();
             mOriginalHeight = mBitmapRegionDecoder.getHeight();
-            mValid = true;
+            if (mOriginalWidth > 0 && mOriginalHeight > 0) {
+                mValid = true;
+            }
         }
     }
 
@@ -77,10 +79,14 @@ public class BitmapRegionLoader {
      * if <code>inBitmap</code> is given, a sub-bitmap might be returned.
      */
     public synchronized Bitmap decodeRegion(Rect rect, Options options) {
+        if (options == null) {
+            options = new Options();
+        }
+        options.inPreferredConfig = Bitmap.Config.ARGB_8888;
         int unsampledInBitmapWidth = -1;
         int unsampledInBitmapHeight = -1;
-        int sampleSize = Math.max(1, options != null ? options.inSampleSize : 1);
-        if (options != null && options.inBitmap != null) {
+        int sampleSize = Math.max(1, options.inSampleSize);
+        if (options.inBitmap != null) {
             unsampledInBitmapWidth = options.inBitmap.getWidth() * sampleSize;
             unsampledInBitmapHeight = options.inBitmap.getHeight() * sampleSize;
         }
@@ -109,12 +115,15 @@ public class BitmapRegionLoader {
                 mTempRect.set(rect);
         }
 
+        if (mTempRect.isEmpty()) {
+            return null;
+        }
         Bitmap bitmap = mBitmapRegionDecoder.decodeRegion(mTempRect, options);
         if (bitmap == null) {
             return null;
         }
 
-        if (options != null && options.inBitmap != null &&
+        if (options.inBitmap != null &&
                 ((mTempRect.width() != unsampledInBitmapWidth
                         || mTempRect.height() != unsampledInBitmapHeight))) {
             // Need to extract the sub-bitmap
@@ -134,7 +143,7 @@ public class BitmapRegionLoader {
                     bitmap, 0, 0,
                     bitmap.getWidth(), bitmap.getHeight(),
                     mRotateMatrix, true);
-            if ((options == null || bitmap != options.inBitmap) && bitmap != rotatedBitmap) {
+            if (bitmap != options.inBitmap && bitmap != rotatedBitmap) {
                 bitmap.recycle();
             }
             bitmap = rotatedBitmap;

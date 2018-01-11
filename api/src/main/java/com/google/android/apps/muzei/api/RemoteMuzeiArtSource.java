@@ -16,11 +16,15 @@
 
 package com.google.android.apps.muzei.api;
 
+import android.Manifest;
 import android.content.Context;
 import android.content.SharedPreferences;
 import android.net.ConnectivityManager;
 import android.net.NetworkInfo;
 import android.os.PowerManager;
+import android.support.annotation.CallSuper;
+import android.support.annotation.NonNull;
+import android.support.annotation.RequiresPermission;
 import android.util.Log;
 
 /**
@@ -59,29 +63,42 @@ public abstract class RemoteMuzeiArtSource extends MuzeiArtSource {
 
     private static final String PREF_RETRY_ATTEMPT = "retry_attempt";
 
-    private String mName;
-
     /**
      * Remember to call this constructor from an empty constructor!
+     *
+     * @param name Should be an ID-style name for your source, usually just the class name. This is
+     *             not user-visible and is only used for {@linkplain #getSharedPreferences()
+     *             storing preferences} and in system log output.
      */
-    public RemoteMuzeiArtSource(String name) {
+    @RequiresPermission(allOf =
+            {Manifest.permission.ACCESS_NETWORK_STATE, Manifest.permission.WAKE_LOCK})
+    public RemoteMuzeiArtSource(@NonNull String name) {
         super(name);
-        mName = name;
     }
 
     /**
      * Subclasses should implement this method (instead of {@link #onUpdate(int)}) and attempt an
      * update, throwing a {@link RetryException} in case of a retryable error such as an HTTP
      * 500-level server error or a read error.
+     *
+     * @param reason the reason for the update request.
+     *
+     * @throws RetryException if there was an issue updating the artwork. It will automatically be
+     * tried again with an exponential backoff.
+     *
+     * @see com.google.android.apps.muzei.api.MuzeiArtSource.UpdateReason
      */
-    protected abstract void onTryUpdate(int reason) throws RetryException;
+    protected abstract void onTryUpdate(@UpdateReason int reason) throws RetryException;
 
     /**
      * Subclasses of {@link RemoteMuzeiArtSource} should implement {@link #onTryUpdate(int)}
      * instead of this method.
      */
+    @RequiresPermission(allOf =
+            {Manifest.permission.ACCESS_NETWORK_STATE, Manifest.permission.WAKE_LOCK})
+    @CallSuper
     @Override
-    protected void onUpdate(int reason) {
+    protected void onUpdate(@UpdateReason int reason) {
         PowerManager pwm = (PowerManager) getSystemService(POWER_SERVICE);
         PowerManager.WakeLock lock = pwm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, mName);
         lock.acquire(FETCH_WAKELOCK_TIMEOUT_MILLIS);
@@ -96,13 +113,12 @@ public abstract class RemoteMuzeiArtSource extends MuzeiArtSource {
                 throw new RetryException();
             }
 
-            // In anticipation of update success, reset update attempt
-            // Any alarms will be cleared before onUpdate is called
-            sp.edit().remove(PREF_RETRY_ATTEMPT).apply();
-            setWantsNetworkAvailable(false);
-
             // Attempt an update
             onTryUpdate(reason);
+
+            // No RetryException, so declare success and reset update attempt
+            sp.edit().remove(PREF_RETRY_ATTEMPT).apply();
+            setWantsNetworkAvailable(false);
 
         } catch (RetryException e) {
             Log.w(TAG, "Error fetching, scheduling retry, id=" + mName);
@@ -121,13 +137,17 @@ public abstract class RemoteMuzeiArtSource extends MuzeiArtSource {
         }
     }
 
+    @CallSuper
     @Override
     protected void onDisabled() {
         super.onDisabled();
-        getSharedPreferences().edit().remove(PREF_RETRY_ATTEMPT).commit();
+        getSharedPreferences().edit().remove(PREF_RETRY_ATTEMPT).apply();
         setWantsNetworkAvailable(false);
     }
 
+    @RequiresPermission(allOf =
+            {Manifest.permission.ACCESS_NETWORK_STATE, Manifest.permission.WAKE_LOCK})
+    @CallSuper
     @Override
     protected void onNetworkAvailable() {
         super.onNetworkAvailable();

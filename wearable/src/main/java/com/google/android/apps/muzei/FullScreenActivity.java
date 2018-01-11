@@ -25,7 +25,7 @@ import android.content.AsyncTaskLoader;
 import android.content.Loader;
 import android.database.ContentObserver;
 import android.graphics.Bitmap;
-import android.graphics.Typeface;
+import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
 import android.support.annotation.NonNull;
@@ -36,17 +36,19 @@ import android.view.MotionEvent;
 import android.view.View;
 import android.widget.TextView;
 
-import com.google.android.apps.muzei.api.Artwork;
 import com.google.android.apps.muzei.api.MuzeiContract;
+import com.google.android.apps.muzei.room.Artwork;
+import com.google.android.apps.muzei.room.MuzeiDatabase;
 import com.google.android.apps.muzei.util.PanView;
-import com.google.android.apps.muzei.util.TypefaceUtil;
+import com.google.firebase.analytics.FirebaseAnalytics;
 
+import net.nurik.roman.muzei.BuildConfig;
 import net.nurik.roman.muzei.R;
 
 import java.io.FileNotFoundException;
 
 public class FullScreenActivity extends Activity implements LoaderManager.LoaderCallbacks<Bitmap> {
-    private static final String TAG = FullScreenActivity.class.getSimpleName();
+    private static final String TAG = "FullScreenActivity";
 
     private PanView mPanView;
     private View mLoadingIndicatorView;
@@ -65,7 +67,8 @@ public class FullScreenActivity extends Activity implements LoaderManager.Loader
     public void onCreate(Bundle savedState) {
         super.onCreate(savedState);
         setContentView(R.layout.full_screen_activity);
-        mPanView = (PanView) findViewById(R.id.pan_view);
+        FirebaseAnalytics.getInstance(this).setUserProperty("device_type", BuildConfig.DEVICE_TYPE);
+        mPanView = findViewById(R.id.pan_view);
         getLoaderManager().initLoader(0, null, this);
 
         mScrimView = findViewById(R.id.scrim);
@@ -73,21 +76,15 @@ public class FullScreenActivity extends Activity implements LoaderManager.Loader
         mHandler.postDelayed(mShowLoadingIndicatorRunnable, 500);
 
         mMetadataContainerView = findViewById(R.id.metadata_container);
-        mTitleView = (TextView) findViewById(R.id.title);
-        mBylineView = (TextView) findViewById(R.id.byline);
+        mTitleView = findViewById(R.id.title);
+        mBylineView = findViewById(R.id.byline);
 
-        Typeface tf = TypefaceUtil.getAndCache(this, "Alegreya-BlackItalic.ttf");
-        mTitleView = (TextView) findViewById(R.id.title);
-        mTitleView.setTypeface(tf);
-
-        tf = TypefaceUtil.getAndCache(this, "Alegreya-Italic.ttf");
-        mBylineView = (TextView) findViewById(R.id.byline);
-        mBylineView.setTypeface(tf);
-
-        // Configure the DismissOverlayView element
-        mDismissOverlay = (DismissOverlayView) findViewById(R.id.dismiss_overlay);
-        mDismissOverlay.setIntroText(R.string.dismiss_overlay_intro);
-        mDismissOverlay.showIntroIfNecessary();
+        mDismissOverlay = findViewById(R.id.dismiss_overlay);
+        // Only show the dismiss overlay on Wear 1.0 devices
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.N) {
+            mDismissOverlay.setIntroText(R.string.dismiss_overlay_intro);
+            mDismissOverlay.showIntroIfNecessary();
+        }
         mDetector = new GestureDetector(this, new GestureDetector.SimpleOnGestureListener() {
             @Override
             public boolean onSingleTapConfirmed(MotionEvent e) {
@@ -108,7 +105,10 @@ public class FullScreenActivity extends Activity implements LoaderManager.Loader
                 if (mDismissOverlay.getVisibility() == View.VISIBLE) {
                     return;
                 }
-                mDismissOverlay.show();
+                // Only show the dismiss overlay on Wear 1.0 devices
+                if (Build.VERSION.SDK_INT < Build.VERSION_CODES.N) {
+                    mDismissOverlay.show();
+                }
             }
         });
     }
@@ -170,7 +170,8 @@ public class FullScreenActivity extends Activity implements LoaderManager.Loader
             @Override
             public Bitmap loadInBackground() {
                 try {
-                    mArtwork = MuzeiContract.Artwork.getCurrentArtwork(FullScreenActivity.this);
+                    mArtwork = MuzeiDatabase.getInstance(FullScreenActivity.this)
+                            .artworkDao().getCurrentArtworkBlocking();
                     mImage = MuzeiContract.Artwork.getCurrentArtworkBitmap(FullScreenActivity.this);
                     return mImage;
                 } catch (FileNotFoundException e) {
@@ -200,8 +201,8 @@ public class FullScreenActivity extends Activity implements LoaderManager.Loader
         mLoadingIndicatorView.setVisibility(View.GONE);
         mPanView.setVisibility(View.VISIBLE);
         mPanView.setImage(image);
-        mTitleView.setText(mArtwork.getTitle());
-        mBylineView.setText(mArtwork.getByline());
+        mTitleView.setText(mArtwork.title);
+        mBylineView.setText(mArtwork.byline);
     }
 
     @Override

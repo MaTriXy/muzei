@@ -14,9 +14,41 @@
  * limitations under the License.
  */
 
+buildscript {
+    repositories {
+        jcenter()
+        google()
+        maven {
+            url 'https://maven.fabric.io/public'
+        }
+    }
+    dependencies {
+        classpath 'com.android.tools.build:gradle:3.0.1'
+        classpath 'com.google.gms:google-services:3.1.0'
+        classpath 'io.fabric.tools:gradle:1.24.4'
+        classpath 'com.google.firebase:firebase-plugins:1.1.1'
+    }
+}
+
+allprojects {
+    repositories {
+        jcenter()
+        google()
+    }
+}
+
 ext {
-    gradleClasspath = 'com.android.tools.build:gradle:1.1.0'
-    compileSdkVersion = 21
-    buildToolsVersion = "21.1.2"
-    targetSdkVersion = compileSdkVersion
+    compileSdkVersion = 27
+    targetSdkVersion = 25
+
+    supportLibraryVersion = "27.0.2"
+    constraintLayoutVersion = "1.0.2"
+    lifecycleVersion = "1.0.0"
+    roomVersion = "1.0.0"
+    pagingVersion = "1.0.0-alpha4-1"
+    googlePlayServicesVersion = "11.8.0"
+    crashlyticsVersion = "2.8.0"
+    wearableVersion = "2.1.0"
+    okhttpVersion = "3.9.1"
+    picassoVersion = "2.5.2"
 }

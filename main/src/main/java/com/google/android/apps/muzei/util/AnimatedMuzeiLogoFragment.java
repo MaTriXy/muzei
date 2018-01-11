@@ -18,8 +18,10 @@ package com.google.android.apps.muzei.util;
 
 import android.animation.AnimatorSet;
 import android.animation.ObjectAnimator;
-import android.app.Fragment;
 import android.os.Bundle;
+import android.support.annotation.NonNull;
+import android.support.annotation.Nullable;
+import android.support.v4.app.Fragment;
 import android.util.TypedValue;
 import android.view.LayoutInflater;
 import android.view.View;
@@ -30,7 +32,6 @@ import android.view.animation.OvershootInterpolator;
 import net.nurik.roman.muzei.R;
 
 public class AnimatedMuzeiLogoFragment extends Fragment {
-    private View mRootView;
     private Runnable mOnFillStartedCallback;
     private View mSubtitleView;
     private AnimatedMuzeiLogoView mLogoView;
@@ -44,12 +45,16 @@ public class AnimatedMuzeiLogoFragment extends Fragment {
     }
 
     @Override
-    public View onCreateView(LayoutInflater inflater, ViewGroup container,
-            Bundle savedInstanceState) {
-        mRootView = inflater.inflate(R.layout.animated_logo_fragment, container, false);
-        mSubtitleView = mRootView.findViewById(R.id.logo_subtitle);
+    public View onCreateView(@NonNull LayoutInflater inflater, @Nullable ViewGroup container,
+            @Nullable Bundle savedInstanceState) {
+        return inflater.inflate(R.layout.animated_logo_fragment, container, false);
+    }
 
-        mLogoView = (AnimatedMuzeiLogoView) mRootView.findViewById(R.id.animated_logo);
+    @Override
+    public void onViewCreated(@NonNull final View view, @Nullable final Bundle savedInstanceState) {
+        mSubtitleView = view.findViewById(R.id.logo_subtitle);
+
+        mLogoView = view.findViewById(R.id.animated_logo);
         mLogoView.setOnStateChangeListener(new AnimatedMuzeiLogoView.OnStateChangeListener() {
             @Override
             public void onStateChange(int state) {
@@ -76,8 +81,9 @@ public class AnimatedMuzeiLogoFragment extends Fragment {
                 }
             }
         });
-        reset();
-        return mRootView;
+        if (savedInstanceState == null) {
+            reset();
+        }
     }
 
     public void start() {

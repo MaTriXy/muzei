@@ -30,15 +30,9 @@
 # okhttp
 
 -dontwarn com.squareup.okhttp.**
+-dontwarn javax.annotation.Nullable
+-dontwarn javax.annotation.ParametersAreNonnullByDefault
 
 # okio
 
 -dontwarn okio.**
-
-# Renderscript support
-
--keepclasseswithmembernames class * {
-    native <methods>;
-}
-
--keep class android.support.v8.renderscript.** { *; }

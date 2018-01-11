@@ -14,45 +14,37 @@
  * limitations under the License.
  */
 
-buildscript {
-    repositories {
-        mavenCentral()
-    }
-    dependencies {
-        classpath rootProject.ext.gradleClasspath
-    }
-}
-
 apply plugin: 'com.android.application'
+apply plugin: 'com.google.firebase.firebase-perf'
+apply plugin: 'io.fabric'
 
 project.archivesBaseName = "muzei"
 
-repositories {
-    mavenCentral()
-}
-
 android {
     compileSdkVersion rootProject.ext.compileSdkVersion
-    buildToolsVersion rootProject.ext.buildToolsVersion
 
-    def Properties versionProps = new Properties()
-    versionProps.load(new FileInputStream(file('version.properties')))
+    Properties versionProps = new Properties()
+    versionProps.load(new FileInputStream(file('../version.properties')))
+
+    dexOptions.preDexLibraries true
 
     defaultConfig {
-        minSdkVersion 17
+        applicationId "net.nurik.roman.muzei"
+        minSdkVersion 19
         targetSdkVersion rootProject.ext.targetSdkVersion
-        renderscriptTargetApi rootProject.ext.targetSdkVersion
-        renderscriptSupportModeEnabled true
 
         versionName versionProps['name']
         versionCode versionProps['code'].toInteger()
+
+        wearAppUnbundled true
+        buildConfigField "String", "DEVICE_TYPE", "\"android\""
     }
 
     signingConfigs {
         release {
-            def Properties localProps = new Properties()
+            Properties localProps = new Properties()
             localProps.load(new FileInputStream(file('../local.properties')))
-            def Properties keyProps = new Properties()
+            Properties keyProps = new Properties()
             if (localProps['keystore.props.file'] != null) {
                 keyProps.load(new FileInputStream(file(localProps['keystore.props.file'])))
             }
@@ -60,19 +52,6 @@ android {
             keyAlias keyProps["alias"] ?: ""
             storePassword keyProps["storePass"] ?: ""
             keyPassword keyProps["pass"] ?: ""
-        }
-    }
-
-    productFlavors {
-        dev {
-            // dev utilizes minSDKVersion = 21 to allow the Android gradle plugin
-            // to pre-dex each module and produce an APK that can be tested on
-            // Android Lollipop without time consuming dex merging processes.
-            minSdkVersion 21
-            multiDexEnabled true
-        }
-
-        prod {
         }
     }
 
@@ -90,9 +69,6 @@ android {
 
         publicBeta.initWith(buildTypes.release)
         publicBeta {
-            minifyEnabled true
-            shrinkResources true
-            proguardFiles getDefaultProguardFile('proguard-android.txt'), file('proguard-project.txt')
             versionNameSuffix " " + versionProps['betaNumber']
         }
 
@@ -100,9 +76,6 @@ android {
         publicDebug {
             debuggable true
             renderscriptDebuggable true
-            minifyEnabled true
-            shrinkResources true
-            proguardFiles getDefaultProguardFile('proguard-android.txt'), file('proguard-project.txt')
             versionNameSuffix " Debug " + versionProps['betaNumber']
         }
     }
@@ -114,17 +87,26 @@ android {
 }
 
 dependencies {
-    compile 'com.squareup.okhttp:okhttp:2.1.0'
-    compile 'com.squareup.okhttp:okhttp-urlconnection:2.1.0'
-    compile 'com.squareup.picasso:picasso:2.4.0'
-    compile 'com.google.android.gms:play-services-wearable:7.0.0'
-    compile 'de.greenrobot:eventbus:2.4.0'
-    compile 'com.android.support:appcompat-v7:21.0.3'
-    compile 'com.android.support:recyclerview-v7:21.0.2'
+    implementation "com.squareup.okhttp3:okhttp:$rootProject.ext.okhttpVersion"
+    implementation "com.squareup.picasso:picasso:$rootProject.ext.picassoVersion"
+    implementation "com.google.android.gms:play-services-wearable:$rootProject.ext.googlePlayServicesVersion"
+    implementation "com.google.firebase:firebase-core:$rootProject.ext.googlePlayServicesVersion"
+    implementation "com.google.firebase:firebase-perf:$rootProject.ext.googlePlayServicesVersion"
+    implementation "com.crashlytics.sdk.android:crashlytics:$rootProject.ext.crashlyticsVersion"
+    implementation "com.twofortyfouram:android-plugin-api-for-locale:1.0.2"
+    implementation "org.greenrobot:eventbus:3.0.0"
+    implementation "com.android.support:appcompat-v7:$rootProject.ext.supportLibraryVersion"
+    implementation "com.android.support:recyclerview-v7:$rootProject.ext.supportLibraryVersion"
+    implementation "com.android.support:design:$rootProject.ext.supportLibraryVersion"
+    implementation "com.android.support:customtabs:$rootProject.ext.supportLibraryVersion"
+    implementation "com.android.support:exifinterface:$rootProject.ext.supportLibraryVersion"
+    implementation "android.arch.lifecycle:extensions:$rootProject.ext.lifecycleVersion"
+    annotationProcessor "android.arch.lifecycle:compiler:$rootProject.ext.lifecycleVersion"
 
-    // :api is included as a transitive dependency from :android-client-common
-    // compile project(':api')
-    compile project(':android-client-common')
-    devWearApp project(path: ':wearable', configuration: 'devRelease')
-    prodWearApp project(path: ':wearable', configuration: 'prodRelease')
+    implementation project(':api')
+    implementation project(':android-client-common')
+    implementation project(':source-featured-art')
+    implementation project(':source-gallery')
 }
+
+apply plugin: 'com.google.gms.google-services'

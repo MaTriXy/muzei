@@ -17,104 +17,67 @@
 package com.google.android.apps.muzei.render;
 
 import android.content.Context;
-import android.media.ExifInterface;
+import android.database.ContentObserver;
+import android.net.Uri;
+import android.os.Handler;
+import android.support.media.ExifInterface;
+import android.util.Log;
 
-import com.google.android.apps.muzei.ArtworkCache;
-import com.google.android.apps.muzei.NewWallpaperNotificationReceiver;
-import com.google.android.apps.muzei.SourceManager;
-import com.google.android.apps.muzei.TaskQueueService;
-import com.google.android.apps.muzei.WearableController;
-import com.google.android.apps.muzei.api.Artwork;
 import com.google.android.apps.muzei.api.MuzeiContract;
-import com.google.android.apps.muzei.api.internal.SourceState;
-import com.google.android.apps.muzei.event.CurrentArtworkDownloadedEvent;
-import com.google.android.apps.muzei.provider.MuzeiProvider;
-import com.google.android.apps.muzei.util.LogUtil;
 
-import java.io.File;
-import java.io.FileInputStream;
-import java.io.FileNotFoundException;
 import java.io.IOException;
-
-import static com.google.android.apps.muzei.util.LogUtil.LOGD;
-import static com.google.android.apps.muzei.util.LogUtil.LOGE;
-import static com.google.android.apps.muzei.util.LogUtil.LOGW;
+import java.io.InputStream;
 
 public class RealRenderController extends RenderController {
-    private static final String TAG = LogUtil.makeLogTag(RealRenderController.class);
+    private static final String TAG = "RealRenderController";
 
-    private String mLastLoadedPath;
+    private ContentObserver mContentObserver;
 
     public RealRenderController(Context context, MuzeiBlurRenderer renderer,
             Callbacks callbacks) {
         super(context, renderer, callbacks);
-        if (MuzeiContract.Artwork.getCurrentArtwork(context) == null) {
-            reloadCurrentArtwork(true);
-        }
-    }
-
-    public void onEventMainThread(CurrentArtworkDownloadedEvent e) {
+        mContentObserver = new ContentObserver(new Handler()) {
+            @Override
+            public void onChange(boolean selfChange, Uri uri) {
+                reloadCurrentArtwork(false);
+            }
+        };
+        context.getContentResolver().registerContentObserver(MuzeiContract.Artwork.CONTENT_URI,
+                true, mContentObserver);
         reloadCurrentArtwork(false);
     }
 
     @Override
+    public void destroy() {
+        super.destroy();
+        mContext.getContentResolver().unregisterContentObserver(mContentObserver);
+    }
+
+    @Override
     protected BitmapRegionLoader openDownloadedCurrentArtwork(boolean forceReload) {
-        SourceManager sm = SourceManager.getInstance(mContext);
-        SourceState selectedSourceState = sm.getSelectedSourceState();
-        Artwork currentArtwork = selectedSourceState != null
-                ? selectedSourceState.getCurrentArtwork() : null;
-        if (currentArtwork == null) {
-            return null;
-        }
-
-        ArtworkCache artworkCache = ArtworkCache.getInstance(mContext);
-        File file = artworkCache.getArtworkCacheFile(sm.getSelectedSource(), currentArtwork);
-        if (file == null) {
-            return null;
-        }
-
-        if (!file.exists() || file.length() == 0) {
-            mContext.startService(TaskQueueService.getDownloadCurrentArtworkIntent(mContext));
-            return null;
-        }
-
-        if (mLastLoadedPath != null
-                && mLastLoadedPath.equals(file.getAbsolutePath())
-                && !forceReload) {
-            return null;
-        }
-
-        // Check if there's rotation
-        int rotation = 0;
-        try {
-            ExifInterface exifInterface = new ExifInterface(file.getAbsolutePath());
-            int orientation = exifInterface.getAttributeInt(
-                    ExifInterface.TAG_ORIENTATION, ExifInterface.ORIENTATION_NORMAL);
-            switch (orientation) {
-                case ExifInterface.ORIENTATION_ROTATE_90: rotation = 90; break;
-                case ExifInterface.ORIENTATION_ROTATE_180: rotation = 180; break;
-                case ExifInterface.ORIENTATION_ROTATE_270: rotation = 270; break;
-            }
-            LOGD(TAG, "Loading artwork with rotation: " + rotation);
-
-        } catch (IOException e) {
-            LOGW(TAG, "Couldn't open EXIF interface on file: " + file.getAbsolutePath(), e);
-        }
-
         // Load the stream
         try {
-            BitmapRegionLoader loader = BitmapRegionLoader.newInstance(
-                    new FileInputStream(file), rotation);
-            if (MuzeiProvider.saveCurrentArtworkLocation(mContext, file)) {
-                mContext.getContentResolver().insert(MuzeiContract.Artwork.CONTENT_URI, currentArtwork.toContentValues());
+            // Check if there's rotation
+            int rotation = 0;
+            try (InputStream in = mContext.getContentResolver().openInputStream(MuzeiContract.Artwork.CONTENT_URI)) {
+                if (in == null) {
+                    return null;
+                }
+                ExifInterface exifInterface = new ExifInterface(in);
+                int orientation = exifInterface.getAttributeInt(
+                        ExifInterface.TAG_ORIENTATION, ExifInterface.ORIENTATION_NORMAL);
+                switch (orientation) {
+                    case ExifInterface.ORIENTATION_ROTATE_90: rotation = 90; break;
+                    case ExifInterface.ORIENTATION_ROTATE_180: rotation = 180; break;
+                    case ExifInterface.ORIENTATION_ROTATE_270: rotation = 270; break;
+                }
+            } catch (IOException|NumberFormatException|StackOverflowError e) {
+                Log.w(TAG, "Couldn't open EXIF interface on artwork", e);
             }
-            NewWallpaperNotificationReceiver
-                    .maybeShowNewArtworkNotification(mContext, currentArtwork, loader);
-            WearableController.updateDataLayer(mContext, currentArtwork, loader);
-            mLastLoadedPath = file.getAbsolutePath();
-            return loader;
+            return BitmapRegionLoader.newInstance(
+                    mContext.getContentResolver().openInputStream(MuzeiContract.Artwork.CONTENT_URI), rotation);
         } catch (IOException e) {
-            LOGE(TAG, "Error loading image: " + file.getAbsolutePath() + " from " + currentArtwork.getImageUri(), e);
+            Log.e(TAG, "Error loading image", e);
             return null;
         }
     }

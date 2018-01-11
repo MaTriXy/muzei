@@ -23,9 +23,8 @@ import android.graphics.Paint;
 import android.os.Handler;
 import android.os.Parcel;
 import android.os.Parcelable;
+import android.support.annotation.Keep;
 import android.support.annotation.NonNull;
-import android.support.v4.os.ParcelableCompat;
-import android.support.v4.os.ParcelableCompatCreatorCallbacks;
 import android.util.AttributeSet;
 import android.util.Log;
 import android.view.GestureDetector;
@@ -39,7 +38,7 @@ import android.widget.OverScroller;
  * and flinging
  */
 public class PanView extends View {
-    private static final String TAG = PanView.class.getSimpleName();
+    private static final String TAG = "PanView";
 
     private Bitmap mImage;
     private Bitmap mScaledImage;
@@ -132,21 +131,22 @@ public class PanView extends View {
     }
 
     private void updateScaledImage() {
-        if (mImage == null) {
+        if (mImage == null || mImage.getWidth() == 0 || mImage.getHeight() == 0) {
             return;
         }
         int width = mImage.getWidth();
         int height = mImage.getHeight();
         if (width > height) {
             float scalingFactor = mHeight * 1f / height;
-            mScaledImage = Bitmap.createScaledBitmap(mImage, (int)(scalingFactor * width), mHeight, true);
+            int scaledWidth = Math.max(1, (int) (scalingFactor * width));
+            mScaledImage = Bitmap.createScaledBitmap(mImage, scaledWidth, mHeight, true);
         } else {
             float scalingFactor = mWidth * 1f / width;
-            mScaledImage = Bitmap.createScaledBitmap(mImage, mWidth, (int)(scalingFactor * height), true);
+            int scaledHeight = Math.max(1, (int) (scalingFactor * height));
+            mScaledImage = Bitmap.createScaledBitmap(mImage, mWidth, scaledHeight, true);
         }
-        ImageBlurrer blurrer = new ImageBlurrer(getContext());
-        mBlurredImage = blurrer.blurBitmap(mScaledImage,
-                ImageBlurrer.MAX_SUPPORTED_BLUR_PIXELS, 0f);
+        ImageBlurrer blurrer = new ImageBlurrer(getContext(), mScaledImage);
+        mBlurredImage = blurrer.blurBitmap(ImageBlurrer.MAX_SUPPORTED_BLUR_PIXELS, 0f);
         blurrer.destroy();
         // Center the image
         mOffsetX = (mWidth - mScaledImage.getWidth()) / 2;
@@ -154,6 +154,7 @@ public class PanView extends View {
         invalidate();
     }
 
+    @Keep
     public void setBlurAmount(float blurAmount) {
         mBlurAmount = blurAmount;
         postInvalidateOnAnimation();
@@ -470,9 +471,14 @@ public class PanView extends View {
         }
 
         public static final Creator<SavedState> CREATOR
-                = ParcelableCompat.newCreator(new ParcelableCompatCreatorCallbacks<SavedState>() {
+                = new ClassLoaderCreator<SavedState>() {
             @Override
             public SavedState createFromParcel(Parcel in, ClassLoader loader) {
+                return createFromParcel(in);
+            }
+
+            @Override
+            public SavedState createFromParcel(Parcel in) {
                 return new SavedState(in);
             }
 
@@ -480,7 +486,7 @@ public class PanView extends View {
             public SavedState[] newArray(int size) {
                 return new SavedState[size];
             }
-        });
+        };
 
         SavedState(Parcel in) {
             super(in);

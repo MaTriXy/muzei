@@ -16,7 +16,6 @@
 
 package com.google.android.apps.muzei.render;
 
-import android.annotation.TargetApi;
 import android.app.ActivityManager;
 import android.content.Context;
 import android.graphics.Bitmap;
@@ -27,9 +26,9 @@ import android.graphics.RectF;
 import android.opengl.GLES20;
 import android.opengl.GLSurfaceView;
 import android.opengl.Matrix;
-import android.os.Build;
-import android.preference.PreferenceManager;
+import android.support.annotation.Keep;
 import android.util.DisplayMetrics;
+import android.util.Log;
 import android.view.animation.AccelerateDecelerateInterpolator;
 import android.view.animation.Interpolator;
 
@@ -38,25 +37,23 @@ import com.google.android.apps.muzei.event.ArtworkSizeChangedEvent;
 import com.google.android.apps.muzei.event.SwitchingPhotosStateChangedEvent;
 import com.google.android.apps.muzei.settings.Prefs;
 import com.google.android.apps.muzei.util.ImageBlurrer;
-import com.google.android.apps.muzei.util.LogUtil;
 import com.google.android.apps.muzei.util.MathUtil;
 import com.google.android.apps.muzei.util.TickingFloatAnimator;
 
 import javax.microedition.khronos.egl.EGLConfig;
 import javax.microedition.khronos.opengles.GL10;
 
-import de.greenrobot.event.EventBus;
-
-import static com.google.android.apps.muzei.util.LogUtil.LOGE;
+import org.greenrobot.eventbus.EventBus;
 
 public class MuzeiBlurRenderer implements GLSurfaceView.Renderer {
-    private static final String TAG = LogUtil.makeLogTag(MuzeiBlurRenderer.class);
+    private static final String TAG = "MuzeiBlurRenderer";
 
     private static final int CROSSFADE_ANIMATION_DURATION = 750;
     private static final int BLUR_ANIMATION_DURATION = 750;
 
     public static final int DEFAULT_BLUR = 250; // max 500
     public static final int DEFAULT_GREY = 0; // max 500
+    public static final int DEMO_BLUR = 250;
     public static final int DEMO_DIM = 64;
     public static final int DEMO_GREY = 0;
     public static final int DEFAULT_MAX_DIM = 128; // technical max 255
@@ -65,7 +62,7 @@ public class MuzeiBlurRenderer implements GLSurfaceView.Renderer {
     private boolean mDemoMode;
     private boolean mPreview;
     private int mMaxPrescaledBlurPixels;
-    private int mBlurKeyframes = 3;
+    private int mBlurKeyframes;
     private int mBlurredSampleSize;
     private int mMaxDim;
     private int mMaxGrey;
@@ -113,24 +110,19 @@ public class MuzeiBlurRenderer implements GLSurfaceView.Renderer {
         recomputeGreyAmount();
     }
 
-    @TargetApi(Build.VERSION_CODES.KITKAT)
     private int getNumberOfKeyframes() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.KITKAT) {
-            ActivityManager activityManager = (ActivityManager)
-                    mContext.getSystemService(Context.ACTIVITY_SERVICE);
-            if (activityManager.isLowRamDevice()) {
-                return 1;
-            }
-        }
-
-        return 5;
+        ActivityManager activityManager = (ActivityManager)
+                mContext.getSystemService(Context.ACTIVITY_SERVICE);
+        return activityManager.isLowRamDevice() ? 1 : 2;
     }
 
     public void recomputeMaxPrescaledBlurPixels() {
         // Compute blur sizes
-        float maxBlurRadiusOverScreenHeight = PreferenceManager
-                .getDefaultSharedPreferences(mContext).getInt(Prefs.PREF_BLUR_AMOUNT, DEFAULT_BLUR)
-                * 0.0001f;
+        int blurAmount = mDemoMode
+                ? DEMO_BLUR
+                : Prefs.getSharedPreferences(mContext)
+                .getInt(Prefs.PREF_BLUR_AMOUNT, DEFAULT_BLUR);
+        float maxBlurRadiusOverScreenHeight = blurAmount * 0.0001f;
         DisplayMetrics dm = mContext.getResources().getDisplayMetrics();
         int maxBlurPx = (int) (dm.heightPixels * maxBlurRadiusOverScreenHeight);
         mBlurredSampleSize = 4;
@@ -141,15 +133,14 @@ public class MuzeiBlurRenderer implements GLSurfaceView.Renderer {
     }
 
     public void recomputeMaxDimAmount() {
-        mMaxDim = PreferenceManager
-                .getDefaultSharedPreferences(mContext).getInt(
+        mMaxDim = Prefs.getSharedPreferences(mContext).getInt(
                         Prefs.PREF_DIM_AMOUNT, DEFAULT_MAX_DIM);
     }
 
     public void recomputeGreyAmount() {
         mMaxGrey = mDemoMode
                 ? DEMO_GREY
-                : PreferenceManager.getDefaultSharedPreferences(mContext)
+                : Prefs.getSharedPreferences(mContext)
                 .getInt(Prefs.PREF_GREY_AMOUNT, DEFAULT_GREY);
     }
 
@@ -170,7 +161,7 @@ public class MuzeiBlurRenderer implements GLSurfaceView.Renderer {
         GLColorOverlay.initGl();
         GLPicture.initGl();
 
-        mColorOverlay = new GLColorOverlay(0);
+        mColorOverlay = new GLColorOverlay();
 
         mSurfaceCreated = true;
         if (mQueuedNextBitmapRegionLoader != null) {
@@ -228,6 +219,7 @@ public class MuzeiBlurRenderer implements GLSurfaceView.Renderer {
         }
     }
 
+    @Keep
     public void setNormalOffsetX(float x) {
         mNormalOffsetX = MathUtil.constrain(0, 1, x);
         onViewportChanged();
@@ -322,7 +314,8 @@ public class MuzeiBlurRenderer implements GLSurfaceView.Renderer {
         }
 
         public void load(BitmapRegionLoader bitmapRegionLoader) {
-            mHasBitmap = (bitmapRegionLoader != null);
+            mHasBitmap = bitmapRegionLoader != null
+                    && bitmapRegionLoader.getWidth() != 0 && bitmapRegionLoader.getHeight() != 0;
             mBitmapAspectRatio = mHasBitmap
                     ? bitmapRegionLoader.getWidth() * 1f / bitmapRegionLoader.getHeight()
                     : 1f;
@@ -331,7 +324,7 @@ public class MuzeiBlurRenderer implements GLSurfaceView.Renderer {
 
             destroyPictures();
 
-            if (bitmapRegionLoader != null) {
+            if (mHasBitmap) {
                 BitmapFactory.Options options = new BitmapFactory.Options();
                 Rect rect = new Rect();
                 int originalWidth = bitmapRegionLoader.getWidth();
@@ -356,7 +349,6 @@ public class MuzeiBlurRenderer implements GLSurfaceView.Renderer {
                         mPictures[f] = mPictures[0];
                     }
                 } else {
-                    ImageBlurrer blurrer = new ImageBlurrer(mContext);
                     int sampleSizeTargetHeight, scaledHeight, scaledWidth;
                     if (mMaxPrescaledBlurPixels > 0) {
                         sampleSizeTargetHeight = mHeight / mBlurredSampleSize;
@@ -378,7 +370,8 @@ public class MuzeiBlurRenderer implements GLSurfaceView.Renderer {
                     rect.set(0, 0, originalWidth, originalHeight);
                     tempBitmap = bitmapRegionLoader.decodeRegion(rect, options);
 
-                    if (tempBitmap != null) {
+                    if (tempBitmap != null
+                            && tempBitmap.getWidth() != 0 && tempBitmap.getHeight() != 0) {
                         // Next, create a scaled down version of the bitmap so that the blur radius
                         // looks appropriate (tempBitmap will likely be bigger than the final
                         // blurred bitmap, and thus the blur may look smaller if we just used
@@ -388,28 +381,29 @@ public class MuzeiBlurRenderer implements GLSurfaceView.Renderer {
                         // issues with RenderScript allocations.
                         Bitmap scaledBitmap = Bitmap.createScaledBitmap(
                                 tempBitmap, scaledWidth, scaledHeight, true);
-
-                        tempBitmap.recycle();
+                        if (tempBitmap != scaledBitmap) {
+                            tempBitmap.recycle();
+                        }
 
                         // And finally, create a blurred copy for each keyframe.
+                        ImageBlurrer blurrer = new ImageBlurrer(mContext, scaledBitmap);
                         for (int f = 1; f <= mBlurKeyframes; f++) {
                             float desaturateAmount = mMaxGrey / 500f * f / mBlurKeyframes;
                             float blurRadius = 0f;
                             if (mMaxPrescaledBlurPixels > 0) {
                                 blurRadius = blurRadiusAtFrame(f);
                             }
-                            Bitmap blurredBitmap = blurrer.blurBitmap(
-                                    scaledBitmap, blurRadius, desaturateAmount);
+                            Bitmap blurredBitmap = blurrer.blurBitmap(blurRadius, desaturateAmount);
                             mPictures[f] = new GLPicture(blurredBitmap);
                             if (blurredBitmap != null) {
                                 blurredBitmap.recycle();
                             }
                         }
+                        blurrer.destroy();
 
                         scaledBitmap.recycle();
-                        blurrer.destroy();
                     } else {
-                        LOGE(TAG, "BitmapRegionLoader failed to decode the region, rect="
+                        Log.e(TAG, "BitmapRegionLoader failed to decode the region, rect="
                                 + rect.toShortString());
                         for (int f = 1; f <= mBlurKeyframes; f++) {
                             mPictures[f] = null;
@@ -540,12 +534,10 @@ public class MuzeiBlurRenderer implements GLSurfaceView.Renderer {
 
         public void destroyPictures() {
             for (int i = 0; i < mPictures.length; i++) {
-                if (mPictures[i] == null) {
-                    continue;
+                if (mPictures[i] != null) {
+                    mPictures[i].destroy();
+                    mPictures[i] = null;
                 }
-
-                mPictures[i].destroy();
-                mPictures[i] = null;
             }
         }
     }
@@ -584,7 +576,7 @@ public class MuzeiBlurRenderer implements GLSurfaceView.Renderer {
         mCallbacks.requestRender();
     }
 
-    public static interface Callbacks {
+    public interface Callbacks {
         void requestRender();
     }
 }

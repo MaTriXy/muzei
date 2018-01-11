@@ -16,28 +16,60 @@
 
 package com.google.android.apps.muzei;
 
+import android.app.WallpaperColors;
 import android.app.WallpaperManager;
+import android.arch.lifecycle.Lifecycle;
+import android.arch.lifecycle.LifecycleObserver;
+import android.arch.lifecycle.LifecycleOwner;
+import android.arch.lifecycle.LifecycleRegistry;
+import android.arch.lifecycle.OnLifecycleEvent;
+import android.content.BroadcastReceiver;
+import android.content.Context;
+import android.content.Intent;
+import android.content.IntentFilter;
+import android.database.ContentObserver;
+import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
+import android.net.Uri;
+import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
+import android.support.annotation.NonNull;
+import android.support.annotation.RequiresApi;
+import android.support.v4.os.UserManagerCompat;
+import android.util.Log;
 import android.view.GestureDetector;
 import android.view.MotionEvent;
 import android.view.SurfaceHolder;
 import android.view.ViewConfiguration;
 
+import com.google.android.apps.muzei.api.MuzeiContract;
 import com.google.android.apps.muzei.event.ArtDetailOpenedClosedEvent;
-import com.google.android.apps.muzei.event.LockScreenVisibleChangedEvent;
-import com.google.android.apps.muzei.event.WallpaperActiveStateChangedEvent;
 import com.google.android.apps.muzei.event.WallpaperSizeChangedEvent;
+import com.google.android.apps.muzei.notifications.NotificationUpdater;
+import com.google.android.apps.muzei.render.ImageUtil;
 import com.google.android.apps.muzei.render.MuzeiBlurRenderer;
 import com.google.android.apps.muzei.render.RealRenderController;
 import com.google.android.apps.muzei.render.RenderController;
+import com.google.android.apps.muzei.shortcuts.ArtworkInfoShortcutController;
+import com.google.android.apps.muzei.wallpaper.LockscreenObserver;
+import com.google.android.apps.muzei.wallpaper.NetworkChangeObserver;
+import com.google.android.apps.muzei.wallpaper.WallpaperAnalytics;
+import com.google.android.apps.muzei.wearable.WearableController;
+import com.google.android.apps.muzei.widget.WidgetUpdater;
 
 import net.rbgrn.android.glwallpaperservice.GLWallpaperService;
 
-import de.greenrobot.event.EventBus;
+import org.greenrobot.eventbus.EventBus;
+import org.greenrobot.eventbus.Subscribe;
 
-public class MuzeiWallpaperService extends GLWallpaperService {
-    private LockScreenVisibleReceiver mLockScreenVisibleReceiver;
+import java.io.FileNotFoundException;
+
+public class MuzeiWallpaperService extends GLWallpaperService implements LifecycleOwner {
+    private static final String TAG = "MuzeiWallpaperService";
+
+    private LifecycleRegistry mLifecycle;
+    private BroadcastReceiver mUnlockReceiver;
 
     @Override
     public Engine onCreateEngine() {
@@ -47,34 +79,68 @@ public class MuzeiWallpaperService extends GLWallpaperService {
     @Override
     public void onCreate() {
         super.onCreate();
-        mLockScreenVisibleReceiver = new LockScreenVisibleReceiver();
-        mLockScreenVisibleReceiver.setupRegisterDeregister(this);
+        mLifecycle = new LifecycleRegistry(this);
+        mLifecycle.addObserver(new WallpaperAnalytics(this));
+        mLifecycle.addObserver(new SourceManager(this));
+        mLifecycle.addObserver(new NetworkChangeObserver(this));
+        mLifecycle.addObserver(new NotificationUpdater(this));
+        mLifecycle.addObserver(new WearableController(this));
+        mLifecycle.addObserver(new WidgetUpdater(this));
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N_MR1) {
+            mLifecycle.addObserver(new ArtworkInfoShortcutController(this, this));
+        }
+        if (UserManagerCompat.isUserUnlocked(this)) {
+            mLifecycle.handleLifecycleEvent(Lifecycle.Event.ON_START);
+        } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.N) {
+            mUnlockReceiver = new BroadcastReceiver() {
+                @Override
+                public void onReceive(Context context, Intent intent) {
+                    mLifecycle.handleLifecycleEvent(Lifecycle.Event.ON_START);
+                    unregisterReceiver(this);
+                    mUnlockReceiver = null;
+                }
+            };
+            IntentFilter filter = new IntentFilter(Intent.ACTION_USER_UNLOCKED);
+            registerReceiver(mUnlockReceiver, filter);
+        }
+    }
+
+    @NonNull
+    @Override
+    public Lifecycle getLifecycle() {
+        return mLifecycle;
     }
 
     @Override
     public void onDestroy() {
-        super.onDestroy();
-        if (mLockScreenVisibleReceiver != null) {
-            mLockScreenVisibleReceiver.destroy();
-            mLockScreenVisibleReceiver = null;
+        if (mUnlockReceiver != null) {
+            unregisterReceiver(mUnlockReceiver);
         }
+        mLifecycle.handleLifecycleEvent(Lifecycle.Event.ON_DESTROY);
+        super.onDestroy();
     }
 
-    private class MuzeiWallpaperEngine extends GLEngine implements
+    public class MuzeiWallpaperEngine extends GLEngine implements
+            LifecycleOwner,
+            LifecycleObserver,
             RenderController.Callbacks,
             MuzeiBlurRenderer.Callbacks {
 
         private static final long TEMPORARY_FOCUS_DURATION_MILLIS = 3000;
+        private static final int MAX_ARTWORK_SIZE = 110; // px
 
         private Handler mMainThreadHandler = new Handler();
 
         private RenderController mRenderController;
         private GestureDetector mGestureDetector;
         private MuzeiBlurRenderer mRenderer;
+        private Bitmap mCurrentArtwork;
 
         private boolean mArtDetailMode = false;
         private boolean mVisible = true;
         private boolean mValidDoubleTap;
+
+        private LifecycleRegistry mEngineLifecycle;
 
         @Override
         public void onCreate(SurfaceHolder surfaceHolder) {
@@ -90,12 +156,83 @@ public class MuzeiWallpaperService extends GLWallpaperService {
             requestRender();
 
             mGestureDetector = new GestureDetector(MuzeiWallpaperService.this, mGestureListener);
+
+            mEngineLifecycle = new LifecycleRegistry(this);
+            mEngineLifecycle.handleLifecycleEvent(Lifecycle.Event.ON_CREATE);
+            mEngineLifecycle.addObserver(new WallpaperAnalytics(MuzeiWallpaperService.this));
+            mEngineLifecycle.addObserver(new LockscreenObserver(MuzeiWallpaperService.this, this));
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O_MR1) {
+                mEngineLifecycle.addObserver(new LifecycleObserver() {
+                    private ContentObserver mContentObserver;
+
+                    @OnLifecycleEvent(Lifecycle.Event.ON_CREATE)
+                    public void registerArtworkObserver() {
+                        mContentObserver = new ContentObserver(new Handler()) {
+                            @Override
+                            public void onChange(boolean selfChange, Uri uri) {
+                                updateCurrentArtwork();
+                            }
+                        };
+                        getContentResolver().registerContentObserver(MuzeiContract.Artwork.CONTENT_URI,
+                                true, mContentObserver);
+                        mContentObserver.onChange(true, MuzeiContract.Artwork.CONTENT_URI);
+                    }
+
+                    @OnLifecycleEvent(Lifecycle.Event.ON_DESTROY)
+                    public void unregisterArtworkObserver() {
+                        getContentResolver().unregisterContentObserver(mContentObserver);
+                    }
+                });
+            }
+
             if (!isPreview()) {
-                EventBus.getDefault().postSticky(new WallpaperActiveStateChangedEvent(true));
+                // Use the MuzeiWallpaperService's lifecycle to wait for the user to unlock
+                mLifecycle.addObserver(this);
             }
             setTouchEventsEnabled(true);
             setOffsetNotificationsEnabled(true);
-            EventBus.getDefault().registerSticky(this);
+            EventBus.getDefault().register(mEventBusSubscriber);
+        }
+
+        @NonNull
+        @Override
+        public Lifecycle getLifecycle() {
+            return mEngineLifecycle;
+        }
+
+        @OnLifecycleEvent(Lifecycle.Event.ON_START)
+        public void onUserUnlocked() {
+            // The MuzeiWallpaperService only gets to ON_START when the user is unlocked
+            // At that point, we can proceed with the engine's lifecycle
+            mEngineLifecycle.handleLifecycleEvent(Lifecycle.Event.ON_RESUME);
+        }
+
+        private void updateCurrentArtwork() {
+            try {
+                BitmapFactory.Options options = new BitmapFactory.Options();
+                options.inJustDecodeBounds = true;
+                BitmapFactory.decodeStream(
+                        getContentResolver().openInputStream(MuzeiContract.Artwork.CONTENT_URI),
+                        null, options);
+                options.inSampleSize = Math.max(
+                        ImageUtil.calculateSampleSize(options.outHeight, MAX_ARTWORK_SIZE / 2),
+                        ImageUtil.calculateSampleSize(options.outWidth, MAX_ARTWORK_SIZE / 2));
+                options.inJustDecodeBounds = false;
+                mCurrentArtwork = BitmapFactory.decodeStream(
+                        getContentResolver().openInputStream(MuzeiContract.Artwork.CONTENT_URI),
+                        null, options);
+                notifyColorsChanged();
+            } catch (FileNotFoundException e) {
+                Log.w(TAG, "Error reading current artwork", e);
+            }
+        }
+
+        @RequiresApi(api = 27)
+        @Override
+        public WallpaperColors onComputeColors() {
+            return mCurrentArtwork != null
+                    ? WallpaperColors.fromBitmap(mCurrentArtwork)
+                    : super.onComputeColors();
         }
 
         @Override
@@ -109,11 +246,11 @@ public class MuzeiWallpaperService extends GLWallpaperService {
 
         @Override
         public void onDestroy() {
-            super.onDestroy();
-            EventBus.getDefault().unregister(this);
+            EventBus.getDefault().unregister(mEventBusSubscriber);
             if (!isPreview()) {
-                EventBus.getDefault().postSticky(new WallpaperActiveStateChangedEvent(false));
+                mLifecycle.removeObserver(this);
             }
+            mEngineLifecycle.handleLifecycleEvent(Lifecycle.Event.ON_DESTROY);
             queueEvent(new Runnable() {
                 @Override
                 public void run() {
@@ -123,34 +260,39 @@ public class MuzeiWallpaperService extends GLWallpaperService {
                 }
             });
             mRenderController.destroy();
+            super.onDestroy();
         }
 
-        public void onEventMainThread(final ArtDetailOpenedClosedEvent e) {
-            if (e.isArtDetailOpened() == mArtDetailMode) {
-                return;
+        class EventBusSubscriber {
+            @Subscribe
+            public void onEventMainThread(final ArtDetailOpenedClosedEvent e) {
+                if (e.isArtDetailOpened() == mArtDetailMode) {
+                    return;
+                }
+
+                mArtDetailMode = e.isArtDetailOpened();
+                cancelDelayedBlur();
+                queueEvent(new Runnable() {
+                    @Override
+                    public void run() {
+                        mRenderer.setIsBlurred(!e.isArtDetailOpened(), true);
+                    }
+                });
             }
 
-            mArtDetailMode = e.isArtDetailOpened();
+            @Subscribe
+            public void onEventMainThread(ArtDetailViewport e) {
+                requestRender();
+            }
+        }
+        private Object mEventBusSubscriber = new EventBusSubscriber();
+
+        public void lockScreenVisibleChanged(final boolean isLockScreenVisible) {
             cancelDelayedBlur();
             queueEvent(new Runnable() {
                 @Override
                 public void run() {
-                    mRenderer.setIsBlurred(!e.isArtDetailOpened(), true);
-                }
-            });
-        }
-
-        public void onEventMainThread(ArtDetailViewport e) {
-            requestRender();
-        }
-
-        public void onEventMainThread(LockScreenVisibleChangedEvent e) {
-            final boolean blur = !e.isLockScreenVisible();
-            cancelDelayedBlur();
-            queueEvent(new Runnable() {
-                @Override
-                public void run() {
-                    mRenderer.setIsBlurred(blur, false);
+                    mRenderer.setIsBlurred(!isLockScreenVisible, false);
                 }
             });
         }

@@ -18,10 +18,10 @@
     android:id="@android:id/text1"
     style="?android:spinnerDropDownItemStyle"
     android:layout_width="match_parent"
-    android:layout_height="?android:listPreferredItemHeightSmall"
+    android:layout_height="?actionBarSize"
     android:ellipsize="marquee"
     android:gravity="center_vertical|start"
     android:paddingStart="16dp"
     android:paddingEnd="16dp"
-    android:singleLine="true"
+    android:maxLines="1"
     android:textAppearance="@style/TextAppearance.ActionBar.Title" />

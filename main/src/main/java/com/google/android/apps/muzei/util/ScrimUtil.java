@@ -23,13 +23,16 @@ import android.graphics.drawable.Drawable;
 import android.graphics.drawable.PaintDrawable;
 import android.graphics.drawable.ShapeDrawable;
 import android.graphics.drawable.shapes.RectShape;
-import android.util.FloatMath;
+import android.util.LruCache;
 import android.view.Gravity;
 
 /**
  * Utility methods for creating prettier gradient scrims.
  */
 public class ScrimUtil {
+
+    private static final LruCache<Integer, Drawable> cubicGradientScrimCache = new LruCache<>(10);
+
     private ScrimUtil() {
     }
 
@@ -39,6 +42,17 @@ public class ScrimUtil {
      * details.
      */
     public static Drawable makeCubicGradientScrimDrawable(int baseColor, int numStops, int gravity) {
+
+        // Generate a cache key by hashing together the inputs, based on the method described in the Effective Java book
+        int cacheKeyHash = baseColor;
+        cacheKeyHash = 31 * cacheKeyHash + numStops;
+        cacheKeyHash = 31 * cacheKeyHash + gravity;
+
+        Drawable cachedGradient = cubicGradientScrimCache.get(cacheKeyHash);
+        if (cachedGradient != null) {
+            return cachedGradient;
+        }
+
         numStops = Math.max(numStops, 2);
 
         PaintDrawable paintDrawable = new PaintDrawable();
@@ -53,7 +67,7 @@ public class ScrimUtil {
 
         for (int i = 0; i < numStops; i++) {
             float x = i * 1f / (numStops - 1);
-            float opacity = MathUtil.constrain(0, 1, FloatMath.pow(x, 3));
+            float opacity = MathUtil.constrain(0, 1, (float) Math.pow(x, 3));
             stopColors[i] = Color.argb((int) (alpha * opacity), red, green, blue);
         }
 
@@ -72,17 +86,17 @@ public class ScrimUtil {
         paintDrawable.setShaderFactory(new ShapeDrawable.ShaderFactory() {
             @Override
             public Shader resize(int width, int height) {
-                LinearGradient linearGradient = new LinearGradient(
+                return new LinearGradient(
                         width * x0,
                         height * y0,
                         width * x1,
                         height * y1,
                         stopColors, null,
                         Shader.TileMode.CLAMP);
-                return linearGradient;
             }
         });
 
+        cubicGradientScrimCache.put(cacheKeyHash, paintDrawable);
         return paintDrawable;
     }
 }

@@ -18,64 +18,55 @@ package com.google.android.apps.muzei.util;
 
 import android.content.Context;
 import android.graphics.Bitmap;
-import android.support.v8.renderscript.Allocation;
-import android.support.v8.renderscript.Element;
-import android.support.v8.renderscript.Matrix3f;
-import android.support.v8.renderscript.RSInvalidStateException;
-import android.support.v8.renderscript.RenderScript;
-import android.support.v8.renderscript.ScriptIntrinsicBlur;
-import android.support.v8.renderscript.ScriptIntrinsicColorMatrix;
+import android.renderscript.Allocation;
+import android.renderscript.Element;
+import android.renderscript.Matrix3f;
+import android.renderscript.RenderScript;
+import android.renderscript.ScriptIntrinsicBlur;
+import android.renderscript.ScriptIntrinsicColorMatrix;
 
 public class ImageBlurrer {
     public static final int MAX_SUPPORTED_BLUR_PIXELS = 25;
-    private RenderScript mRS;
 
-    private ScriptIntrinsicBlur mSIBlur;
-    private ScriptIntrinsicColorMatrix mSIGrey;
-    private Allocation mTmp1;
-    private Allocation mTmp2;
+    private final RenderScript mRS;
+    private final ScriptIntrinsicBlur mSIBlur;
+    private final ScriptIntrinsicColorMatrix mSIGrey;
+    private final Bitmap mSourceBitmap;
+    private final Allocation mAllocationSrc;
 
-    public ImageBlurrer(Context context) {
+    public ImageBlurrer(Context context, Bitmap src) {
         mRS = RenderScript.create(context);
         mSIBlur = ScriptIntrinsicBlur.create(mRS, Element.U8_4(mRS));
-        mSIGrey = ScriptIntrinsicColorMatrix.create(mRS, Element.U8_4(mRS));
+        mSIGrey = ScriptIntrinsicColorMatrix.create(mRS);
+
+        mSourceBitmap = src;
+        mAllocationSrc = src != null ? Allocation.createFromBitmap(mRS, src) : null;
     }
 
-    public Bitmap blurBitmap(Bitmap src, float radius, float desaturateAmount) {
-        if (src == null) {
+    public Bitmap blurBitmap(float radius, float desaturateAmount) {
+        if (mSourceBitmap == null) {
             return null;
         }
 
-        Bitmap dest = Bitmap.createBitmap(src);
+        Bitmap dest = mSourceBitmap.copy(mSourceBitmap.getConfig(), true);
         if (radius == 0f && desaturateAmount == 0f) {
             return dest;
         }
 
-        if (mTmp1 != null) {
-            mTmp1.destroy();
-        }
-        if (mTmp2 != null) {
-            try {
-                mTmp2.destroy();
-            } catch (RSInvalidStateException e) {
-                // Ignore 'Object already destroyed' exceptions
-            }
-        }
-
-        mTmp1 = Allocation.createFromBitmap(mRS, src);
-        mTmp2 = Allocation.createFromBitmap(mRS, dest);
+        Allocation allocationDest = Allocation.createFromBitmap(mRS, dest);
 
         if (radius > 0f && desaturateAmount > 0f) {
-            doBlur(radius, mTmp1, mTmp2);
-            doDesaturate(MathUtil.constrain(0, 1, desaturateAmount), mTmp2, mTmp1);
-            mTmp1.copyTo(dest);
+            doBlur(radius, mAllocationSrc, allocationDest);
+            doDesaturate(MathUtil.constrain(0, 1, desaturateAmount), allocationDest, mAllocationSrc);
+            mAllocationSrc.copyTo(dest);
         } else if (radius > 0f) {
-            doBlur(radius, mTmp1, mTmp2);
-            mTmp2.copyTo(dest);
+            doBlur(radius, mAllocationSrc, allocationDest);
+            allocationDest.copyTo(dest);
         } else {
-            doDesaturate(MathUtil.constrain(0, 1, desaturateAmount), mTmp1, mTmp2);
-            mTmp2.copyTo(dest);
+            doDesaturate(MathUtil.constrain(0, 1, desaturateAmount), mAllocationSrc, allocationDest);
+            allocationDest.copyTo(dest);
         }
+        allocationDest.destroy();
         return dest;
     }
 
@@ -105,11 +96,9 @@ public class ImageBlurrer {
 
     public void destroy() {
         mSIBlur.destroy();
-        if (mTmp1 != null) {
-            mTmp1.destroy();
-        }
-        if (mTmp2 != null) {
-            mTmp2.destroy();
+        mSIGrey.destroy();
+        if (mAllocationSrc != null) {
+            mAllocationSrc.destroy();
         }
         mRS.destroy();
     }

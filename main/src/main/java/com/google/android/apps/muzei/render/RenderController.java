@@ -17,50 +17,55 @@
 package com.google.android.apps.muzei.render;
 
 import android.content.Context;
+import android.content.SharedPreferences;
 import android.os.AsyncTask;
 import android.os.Handler;
 import android.os.Message;
 
-import com.google.android.apps.muzei.event.BlurAmountChangedEvent;
-import com.google.android.apps.muzei.event.DimAmountChangedEvent;
-import com.google.android.apps.muzei.event.GreyAmountChangedEvent;
+import com.google.android.apps.muzei.settings.Prefs;
 
-import de.greenrobot.event.EventBus;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 public abstract class RenderController {
     protected Context mContext;
     protected MuzeiBlurRenderer mRenderer;
     protected Callbacks mCallbacks;
     protected boolean mVisible;
+    private ExecutorService mExecutorService = Executors.newSingleThreadExecutor();
     private BitmapRegionLoader mQueuedBitmapRegionLoader;
+    private SharedPreferences.OnSharedPreferenceChangeListener mOnSharedPreferenceChangeListener =
+            new SharedPreferences.OnSharedPreferenceChangeListener() {
+                @Override
+                public void onSharedPreferenceChanged(SharedPreferences sp, String key) {
+                    if (Prefs.PREF_BLUR_AMOUNT.equals(key)) {
+                        mRenderer.recomputeMaxPrescaledBlurPixels();
+                        throttledForceReloadCurrentArtwork();
+                    } else if (Prefs.PREF_DIM_AMOUNT.equals(key)) {
+                        mRenderer.recomputeMaxDimAmount();
+                        throttledForceReloadCurrentArtwork();
+                    } else if (Prefs.PREF_GREY_AMOUNT.equals(key)) {
+                        mRenderer.recomputeGreyAmount();
+                        throttledForceReloadCurrentArtwork();
+                    }
+                }
+            };
 
     public RenderController(Context context, MuzeiBlurRenderer renderer, Callbacks callbacks) {
         mRenderer = renderer;
         mContext = context;
         mCallbacks = callbacks;
-        EventBus.getDefault().register(this);
+        Prefs.getSharedPreferences(context)
+                .registerOnSharedPreferenceChangeListener(mOnSharedPreferenceChangeListener);
     }
 
     public void destroy() {
         if (mQueuedBitmapRegionLoader != null) {
             mQueuedBitmapRegionLoader.destroy();
         }
-        EventBus.getDefault().unregister(this);
-    }
-
-    public void onEventMainThread(BlurAmountChangedEvent e) {
-        mRenderer.recomputeMaxPrescaledBlurPixels();
-        throttledForceReloadCurrentArtwork();
-    }
-
-    public void onEventMainThread(DimAmountChangedEvent e) {
-        mRenderer.recomputeMaxDimAmount();
-        throttledForceReloadCurrentArtwork();
-    }
-
-    public void onEventMainThread(GreyAmountChangedEvent e) {
-        mRenderer.recomputeGreyAmount();
-        throttledForceReloadCurrentArtwork();
+        Prefs.getSharedPreferences(mContext)
+                .unregisterOnSharedPreferenceChangeListener(mOnSharedPreferenceChangeListener);
+        mExecutorService.shutdownNow();
     }
 
     private void throttledForceReloadCurrentArtwork() {
@@ -78,6 +83,10 @@ public abstract class RenderController {
     protected abstract BitmapRegionLoader openDownloadedCurrentArtwork(boolean forceReload);
 
     public void reloadCurrentArtwork(final boolean forceReload) {
+        if (mExecutorService.isShutdown() || mExecutorService.isTerminated()) {
+            // Don't reload artwork for shutdown or destroyed RenderControllers
+            return;
+        }
         new AsyncTask<Void, Void, BitmapRegionLoader>() {
             @Override
             protected BitmapRegionLoader doInBackground(Void... voids) {
@@ -87,7 +96,8 @@ public abstract class RenderController {
 
             @Override
             protected void onPostExecute(final BitmapRegionLoader bitmapRegionLoader) {
-                if (bitmapRegionLoader == null) {
+                if (bitmapRegionLoader == null || bitmapRegionLoader.getWidth() == 0 ||
+                        bitmapRegionLoader.getHeight() == 0) {
                     return;
                 }
 
@@ -102,7 +112,7 @@ public abstract class RenderController {
                     }
                 });
             }
-        }.execute((Void) null);
+        }.executeOnExecutor(mExecutorService, (Void) null);
     }
 
     public void setVisible(boolean visible) {
@@ -121,7 +131,7 @@ public abstract class RenderController {
         }
     }
 
-    public static interface Callbacks {
+    public interface Callbacks {
         void queueEventOnGlThread(Runnable runnable);
         void requestRender();
     }

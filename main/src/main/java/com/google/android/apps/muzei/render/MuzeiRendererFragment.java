@@ -16,17 +16,17 @@
 
 package com.google.android.apps.muzei.render;
 
-import android.annotation.TargetApi;
 import android.app.ActivityManager;
-import android.app.Fragment;
 import android.content.Context;
 import android.graphics.Bitmap;
 import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.drawable.Drawable;
 import android.opengl.GLSurfaceView;
-import android.os.Build;
 import android.os.Bundle;
+import android.support.annotation.NonNull;
+import android.support.annotation.Nullable;
+import android.support.v4.app.Fragment;
 import android.util.DisplayMetrics;
 import android.view.LayoutInflater;
 import android.view.View;
@@ -34,17 +34,13 @@ import android.view.ViewGroup;
 import android.widget.ImageView;
 
 import com.google.android.apps.muzei.util.ImageBlurrer;
-import com.google.android.apps.muzei.util.LogUtil;
 import com.google.android.apps.muzei.util.MathUtil;
-
 import com.squareup.picasso.Picasso;
 import com.squareup.picasso.Target;
 
 public class MuzeiRendererFragment extends Fragment implements
         RenderController.Callbacks,
         MuzeiBlurRenderer.Callbacks {
-
-    private static final String TAG = LogUtil.makeLogTag(MuzeiRendererFragment.class);
 
     private static final String ARG_DEMO_MODE = "demo_mode";
     private static final String ARG_DEMO_FOCUS = "demo_focus";
@@ -70,24 +66,17 @@ public class MuzeiRendererFragment extends Fragment implements
     public void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         Bundle args = getArguments();
-        mDemoMode = args.getBoolean(ARG_DEMO_MODE, false);
-        mDemoFocus = args.getBoolean(ARG_DEMO_FOCUS, false);
+        mDemoMode = args == null || args.getBoolean(ARG_DEMO_MODE, false);
+        mDemoFocus = args == null || args.getBoolean(ARG_DEMO_FOCUS, false);
     }
 
     @Override
-    @TargetApi(Build.VERSION_CODES.KITKAT)
-    public View onCreateView(LayoutInflater inflater, ViewGroup container,
+    public View onCreateView(@NonNull LayoutInflater inflater, @Nullable ViewGroup container,
             Bundle savedInstanceState) {
-        boolean simpleDemoMode = false;
-        if (mDemoMode && Build.VERSION.SDK_INT >= Build.VERSION_CODES.KITKAT) {
-            ActivityManager activityManager = (ActivityManager)
-                    getActivity().getSystemService(Context.ACTIVITY_SERVICE);
-            if (activityManager.isLowRamDevice()) {
-                simpleDemoMode = true;
-            }
-        }
+        ActivityManager activityManager = (ActivityManager)
+                getContext().getSystemService(Context.ACTIVITY_SERVICE);
 
-        if (simpleDemoMode) {
+        if (mDemoMode && activityManager.isLowRamDevice()) {
             DisplayMetrics dm = getResources().getDisplayMetrics();
             int targetWidth = dm.widthPixels;
             int targetHeight = dm.heightPixels;
@@ -98,16 +87,16 @@ public class MuzeiRendererFragment extends Fragment implements
                         (int) (dm.widthPixels * 1f / dm.heightPixels * targetHeight));
             }
 
-            mSimpleDemoModeImageView = new ImageView(container.getContext());
+            mSimpleDemoModeImageView = new ImageView(getContext());
             mSimpleDemoModeImageView.setScaleType(ImageView.ScaleType.CENTER_CROP);
-            Picasso.with(getActivity())
+            Picasso.with(getContext())
                     .load("file:///android_asset/starrynight.jpg")
                     .resize(targetWidth, targetHeight)
                     .centerCrop()
                     .into(mSimpleDemoModeLoadedTarget);
             return mSimpleDemoModeImageView;
         } else {
-            mView = new MuzeiView(getActivity());
+            mView = new MuzeiView(getContext());
             mView.setPreserveEGLContextOnPause(true);
             return mView;
         }
@@ -118,9 +107,9 @@ public class MuzeiRendererFragment extends Fragment implements
         public void onBitmapLoaded(Bitmap bitmap, Picasso.LoadedFrom loadedFrom) {
             if (!mDemoFocus) {
                 // Blur
-                ImageBlurrer blurrer = new ImageBlurrer(getActivity());
-                Bitmap blurred = blurrer.blurBitmap(bitmap,
-                        ImageBlurrer.MAX_SUPPORTED_BLUR_PIXELS, 0);
+                ImageBlurrer blurrer = new ImageBlurrer(getContext(), bitmap);
+                Bitmap blurred = blurrer.blurBitmap(ImageBlurrer.MAX_SUPPORTED_BLUR_PIXELS, 0);
+                blurrer.destroy();
 
                 // Dim
                 Canvas c = new Canvas(blurred);
@@ -148,10 +137,7 @@ public class MuzeiRendererFragment extends Fragment implements
         if (mView == null) {
             return;
         }
-
-        if (mView != null) {
-            mView.mRenderController.setVisible(!hidden);
-        }
+        mView.mRenderController.setVisible(!hidden);
     }
 
     @Override
@@ -229,7 +215,6 @@ public class MuzeiRendererFragment extends Fragment implements
 
         @Override
         protected void onDetachedFromWindow() {
-            super.onDetachedFromWindow();
             mRenderController.destroy();
             queueEventOnGlThread(new Runnable() {
                 @Override
@@ -237,6 +222,7 @@ public class MuzeiRendererFragment extends Fragment implements
                     mRenderer.destroy();
                 }
             });
+            super.onDetachedFromWindow();
         }
     }
 }

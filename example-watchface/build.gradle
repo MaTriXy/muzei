@@ -14,27 +14,17 @@
  * limitations under the License.
  */
 
-buildscript {
-    repositories {
-        mavenCentral()
-    }
-    dependencies {
-        classpath rootProject.ext.gradleClasspath
-    }
-}
-
 apply plugin: 'com.android.application'
 
 dependencies {
-    compile 'com.google.android.support:wearable:1.1.0'
-    //compile 'com.google.android.apps.muzei:muzei-api:+'
-    compile project(':api')
+    implementation "com.google.android.support:wearable:1.4.0"
+    //implementation "com.google.android.apps.muzei:muzei-api:+"
+    implementation project(':api')
 }
 
 
 android {
     compileSdkVersion rootProject.ext.compileSdkVersion
-    buildToolsVersion rootProject.ext.buildToolsVersion
 
     defaultConfig {
         minSdkVersion 21

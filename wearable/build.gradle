@@ -14,41 +14,34 @@
  * limitations under the License.
  */
 
-buildscript {
-    repositories {
-        mavenCentral()
-    }
-    dependencies {
-        classpath rootProject.ext.gradleClasspath
-    }
-}
-
 apply plugin: 'com.android.application'
+apply plugin: 'com.google.firebase.firebase-perf'
+apply plugin: 'io.fabric'
 
 android {
     compileSdkVersion rootProject.ext.compileSdkVersion
-    buildToolsVersion rootProject.ext.buildToolsVersion
 
-    def Properties versionProps = new Properties()
-    versionProps.load(new FileInputStream(file('version.properties')))
+    Properties versionProps = new Properties()
+    versionProps.load(new FileInputStream(file('../version.properties')))
 
-    publishNonDefault true
+    dexOptions.preDexLibraries true
 
     defaultConfig {
-        minSdkVersion 20
+        applicationId "net.nurik.roman.muzei"
+        minSdkVersion 23
         targetSdkVersion rootProject.ext.targetSdkVersion
-        renderscriptTargetApi rootProject.ext.targetSdkVersion
-        renderscriptSupportModeEnabled true
 
         versionName versionProps['name']
-        versionCode versionProps['code'].toInteger()
+        versionCode versionProps['codeWear'].toInteger()
+
+        buildConfigField "String", "DEVICE_TYPE", "\"wear\""
     }
 
     signingConfigs {
         release {
-            def Properties localProps = new Properties()
+            Properties localProps = new Properties()
             localProps.load(new FileInputStream(file('../local.properties')))
-            def Properties keyProps = new Properties()
+            Properties keyProps = new Properties()
             if (localProps['keystore.props.file'] != null) {
                 keyProps.load(new FileInputStream(file(localProps['keystore.props.file'])))
             }
@@ -59,25 +52,21 @@ android {
         }
     }
 
-    productFlavors {
-        dev {
-            // dev utilizes minSDKVersion = 21 to allow the Android gradle plugin
-            // to pre-dex each module and produce an APK that can be tested on
-            // Android Lollipop without time consuming dex merging processes.
-            minSdkVersion 21
-            multiDexEnabled true
-        }
-
-        prod {
-        }
-    }
-
     buildTypes {
+        debug {
+            versionNameSuffix " Debug"
+        }
+
         release {
             minifyEnabled true
             shrinkResources true
             proguardFiles getDefaultProguardFile('proguard-android.txt'), file('proguard-project.txt')
             signingConfig signingConfigs.release
+        }
+
+        publicBeta.initWith(buildTypes.release)
+        publicBeta {
+            versionNameSuffix " " + versionProps['betaNumber']
         }
     }
 
@@ -88,7 +77,21 @@ android {
 }
 
 dependencies {
-    compile 'com.google.android.support:wearable:1.1.0'
-    compile 'com.google.android.gms:play-services-wearable:7.0.0'
-    compile project(':android-client-common')
+    implementation "com.android.support:support-compat:$rootProject.ext.supportLibraryVersion"
+    implementation "com.android.support:exifinterface:$rootProject.ext.supportLibraryVersion"
+    implementation "com.android.support:wear:$rootProject.ext.supportLibraryVersion"
+    compileOnly "com.google.android.wearable:wearable:$rootProject.ext.wearableVersion"
+    implementation "com.google.android.support:wearable:$rootProject.ext.wearableVersion"
+    // Only used because other dependencies depend on an old version of the Support Library
+    implementation "com.android.support:support-v4:$rootProject.ext.supportLibraryVersion"
+
+    implementation "com.google.android.gms:play-services-wearable:$rootProject.ext.googlePlayServicesVersion"
+    implementation "com.google.firebase:firebase-core:$rootProject.ext.googlePlayServicesVersion"
+    implementation "com.google.firebase:firebase-perf:$rootProject.ext.googlePlayServicesVersion"
+    implementation "com.crashlytics.sdk.android:crashlytics:$rootProject.ext.crashlyticsVersion"
+
+    implementation project(':api')
+    implementation project(':android-client-common')
 }
+
+apply plugin: 'com.google.gms.google-services'
