@@ -14,7 +14,7 @@
   limitations under the License.
   -->
 
-<android.support.constraint.ConstraintLayout
+<androidx.constraintlayout.widget.ConstraintLayout
     xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     xmlns:tools="http://schemas.android.com/tools"
@@ -106,8 +106,8 @@
             android:layout_height="wrap_content"
             android:layout_gravity="center"
             android:src="@drawable/gallery_chosen_photo_selected"
-            android:tint="@color/gallery_theme_dark"/>
+            app:tint="@color/gallery_theme_dark"/>
 
     </FrameLayout>
 
-</android.support.constraint.ConstraintLayout>
+</androidx.constraintlayout.widget.ConstraintLayout>

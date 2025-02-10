@@ -13,14 +13,17 @@
   See the License for the specific language governing permissions and
   limitations under the License.
   -->
-<android.support.design.widget.CoordinatorLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<androidx.coordinatorlayout.widget.CoordinatorLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:fitsSystemWindows="true">
+    android:fitsSystemWindows="true"
+    app:statusBarBackground="?android:colorBackground">
 
-    <android.support.v7.widget.RecyclerView android:id="@+id/photo_grid"
+    <androidx.recyclerview.widget.RecyclerView
+        android:id="@+id/photo_grid"
         android:layout_width="match_parent"
         android:layout_height="match_parent"
         android:gravity="center"
@@ -32,59 +35,67 @@
         android:drawSelectorOnTop="true"
         android:horizontalSpacing="@dimen/gallery_chosen_photo_grid_spacing"
         android:verticalSpacing="@dimen/gallery_chosen_photo_grid_spacing"
-        app:layout_behavior="@string/appbar_scrolling_view_behavior" />
+        app:layout_behavior="@string/appbar_scrolling_view_behavior"/>
 
-    <android.support.design.widget.AppBarLayout
+    <com.google.android.material.appbar.AppBarLayout
         android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:theme="@style/ThemeOverlay.AppCompat.Dark.ActionBar">
+        android:layout_height="wrap_content">
 
-        <android.support.v7.widget.Toolbar
-            android:id="@+id/app_bar"
+        <androidx.appcompat.widget.Toolbar
+            android:id="@+id/toolbar"
             android:layout_width="match_parent"
             android:layout_height="?actionBarSize"
             app:title="@string/gallery_title"
-            app:layout_scrollFlags="scroll|enterAlways" />
+            app:layout_scrollFlags="scroll|enterAlways"
+            app:popupTheme="@style/ThemeOverlay.AppCompat.DayNight"/>
 
-    </android.support.design.widget.AppBarLayout>
+    </com.google.android.material.appbar.AppBarLayout>
 
-    <FrameLayout android:id="@android:id/empty"
+    <FrameLayout
+        android:id="@android:id/empty"
         android:layout_width="match_parent"
         android:layout_height="match_parent">
 
-        <LinearLayout android:layout_width="wrap_content"
+        <LinearLayout
+            android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:orientation="vertical"
             android:padding="32dp"
             android:layout_gravity="center"
             android:gravity="center">
 
-            <ViewAnimator android:id="@+id/empty_animator"
+            <ViewAnimator
+                android:id="@+id/empty_animator"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_gravity="center"
                 android:measureAllChildren="false">
 
+                <Button
+                    android:id="@+id/reselect_selected_photos"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:text="@string/gallery_reselect_selected_photos"/>
+
                 <com.google.android.apps.muzei.gallery.GalleryEmptyStateGraphicView
                     android:layout_width="wrap_content"
-                    android:layout_height="wrap_content" />
+                    android:layout_height="wrap_content"/>
 
                 <Button
-                    android:id="@+id/gallery_enable_random"
+                    android:id="@+id/enable_random"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="@string/gallery_enable_random"
-                    style="@style/Widget.AppCompat.Button.Colored"/>
+                    android:text="@string/gallery_enable_random"/>
 
                 <Button
-                    android:id="@+id/gallery_edit_permission_settings"
+                    android:id="@+id/edit_permission_settings"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
-                    android:text="@string/gallery_edit_settings"
-                    style="@style/Widget.AppCompat.Button.Colored"/>
+                    android:text="@string/gallery_edit_settings"/>
             </ViewAnimator>
 
-            <TextView android:id="@+id/empty_description"
+            <TextView
+                android:id="@+id/empty_description"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="16dp"
@@ -99,7 +110,8 @@
                 tools:targetApi="M"/>
         </LinearLayout>
 
-        <TextView android:layout_width="wrap_content"
+        <TextView
+            android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_gravity="bottom|center_horizontal"
             android:layout_marginBottom="88dp"
@@ -107,11 +119,11 @@
             android:fontFamily="sans-serif-condensed"
             android:textStyle="italic"
             android:textColor="@color/gallery_theme_dark"
-            android:text="@string/gallery_empty_subtitle" />
+            android:text="@string/gallery_empty_subtitle"/>
 
     </FrameLayout>
 
-    <android.support.design.widget.FloatingActionButton
+    <com.google.android.material.floatingactionbutton.FloatingActionButton
         android:id="@+id/add_fab"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
@@ -130,23 +142,29 @@
         android:orientation="horizontal"
         android:visibility="invisible">
 
-        <ImageButton
+        <Button
             android:id="@+id/add_photos"
-            style="?android:attr/buttonBarButtonStyle"
+            style="@style/Widget.Material3.Button.IconButton"
             android:layout_width="0dp"
             android:layout_height="match_parent"
             android:layout_weight="1"
             android:contentDescription="@string/gallery_add_photos"
-            android:src="@drawable/gallery_ic_add_photo"/>
+            app:icon="@drawable/gallery_ic_add_photo"
+            app:iconGravity="textStart"
+            app:iconSize="24dp"
+            app:iconTint="@null"/>
 
-        <ImageButton
+        <Button
             android:id="@+id/add_folder"
-            style="?android:attr/buttonBarButtonStyle"
+            style="@style/Widget.Material3.Button.IconButton"
             android:layout_width="0dp"
             android:layout_height="match_parent"
             android:layout_weight="1"
             android:contentDescription="@string/gallery_add_folder"
-            android:src="@drawable/gallery_ic_add_folder"/>
+            app:icon="@drawable/gallery_ic_add_folder"
+            app:iconGravity="textStart"
+            app:iconSize="24dp"
+            app:iconTint="@null"/>
     </LinearLayout>
 
     <LinearLayout
@@ -156,16 +174,17 @@
         android:orientation="vertical"
         android:visibility="invisible"
         android:elevation="@dimen/gallery_header_elevation"
-        android:theme="@style/ThemeOverlay.AppCompat.Dark.ActionBar"
+        android:theme="@style/ThemeOverlay.Material3.Dark.ActionBar"
         tools:targetApi="LOLLIPOP">
 
-        <android.support.v7.widget.Toolbar
+        <androidx.appcompat.widget.Toolbar
             android:background="@color/gallery_theme_dark"
             android:id="@+id/selection_toolbar"
             android:layout_width="match_parent"
             android:layout_height="?actionBarSize"
             app:title="@string/gallery_title"
-            app:navigationIcon="?attr/homeAsUpIndicator" />
+            app:navigationIcon="?attr/homeAsUpIndicator"
+            app:popupTheme="@style/ThemeOverlay.AppCompat.DayNight"/>
 
     </LinearLayout>
-</android.support.design.widget.CoordinatorLayout>
+</androidx.coordinatorlayout.widget.CoordinatorLayout>

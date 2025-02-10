@@ -19,20 +19,15 @@
 #   public *;
 #}
 
--keep public class * extends android.app,backup.BackupAgent
-
--keepclassmembers class ** {
-    public void onEvent*(**);
-}
+-keep public class * extends android.app.backup.BackupAgent
 
 -dontobfuscate
 
 # okhttp
 
--dontwarn com.squareup.okhttp.**
--dontwarn javax.annotation.Nullable
--dontwarn javax.annotation.ParametersAreNonnullByDefault
-
-# okio
-
+-dontwarn okhttp3.**
 -dontwarn okio.**
+-dontwarn javax.annotation.**
+-dontwarn org.conscrypt.**
+# A resource is loaded with a relative path so the package of this class must be preserved.
+-keepnames class okhttp3.internal.publicsuffix.PublicSuffixDatabase

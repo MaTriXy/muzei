@@ -1,1 +1,20 @@
-include ':api', ':android-client-common', ':source-featured-art', ':source-gallery', ':main', ':wearable', ':example-source-500px', 'example-watchface'
+pluginManagement {
+    repositories {
+        google()
+        gradlePluginPortal()
+    }
+}
+
+include ':muzei-api'
+include ':extensions'
+include ':legacy-common'
+include ':legacy-standalone'
+include ':android-client-common'
+include ':source-featured-art'
+include ':source-gallery'
+include ':source-single'
+include ':gl-wallpaper'
+include ':main'
+include ':wearable'
+include ':example-unsplash'
+include ':example-watchface'

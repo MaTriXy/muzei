@@ -1,0 +1,29 @@
+<!--
+  Copyright 2014 Google Inc.
+
+  Licensed under the Apache License, Version 2.0 (the "License");
+  you may not use this file except in compliance with the License.
+  You may obtain a copy of the License at
+
+      http://www.apache.org/licenses/LICENSE-2.0
+
+  Unless required by applicable law or agreed to in writing, software
+  distributed under the License is distributed on an "AS IS" BASIS,
+  WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+  See the License for the specific language governing permissions and
+  limitations under the License.
+  -->
+
+<resources xmlns:xliff="urn:oasis:names:tc:xliff:document:1.2">
+    <string name="datalayer_source_title">From phone</string>
+    <string name="datalayer_source_description">Sync the background between your phone and watch</string>
+    <string name="datalayer_open_failed">Unable to find your phone to open <xliff:g id="muzei_name">Muzei</xliff:g></string>
+
+    <string name="datalayer_activate_channel_name">Activate <xliff:g id="muzei_name">Muzei</xliff:g></string>
+    <string name="datalayer_enable_title">Sync your background</string>
+    <string name="datalayer_enable_text">Use your <xliff:g id="muzei_name">Muzei</xliff:g> wallpaper from %s on your watch</string>
+    <string name="datalayer_install_title">Install <xliff:g id="muzei_name">Muzei</xliff:g> on your phone</string>
+    <string name="datalayer_install_text">Keep your phone and watch in sync by using <xliff:g id="muzei_name">Muzei</xliff:g> as your phone\'s wallpaper</string>
+    <string name="datalayer_install_action">Open <xliff:g id="google_play">Google Play</xliff:g> Store on your phone</string>
+    <string name="datalayer_install_failed">Unable to find your phone to install <xliff:g id="muzei_name">Muzei</xliff:g></string>
+</resources>

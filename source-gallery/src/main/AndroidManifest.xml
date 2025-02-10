@@ -15,9 +15,26 @@
   -->
 
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
-          package="com.google.android.apps.muzei.gallery" >
+    xmlns:tools="http://schemas.android.com/tools">
 
-    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" />
+    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE"
+        android:maxSdkVersion="32"/>
+    <uses-permission-sdk-23 android:name="android.permission.READ_MEDIA_IMAGES"/>
+    <uses-permission android:name="android.permission.ACCESS_MEDIA_LOCATION"/>
+    <uses-permission android:name="android.permission.READ_MEDIA_VISUAL_USER_SELECTED" />
+
+    <!-- Remove unused foreground service permission auto-added by WorkManager -->
+    <uses-permission
+        android:name="android.permission.FOREGROUND_SERVICE"
+        tools:node="remove" />
+
+    <queries>
+        <!-- Used to find the set of apps still only supporting GET_CONTENT -->
+        <intent>
+            <action android:name="android.intent.action.GET_CONTENT"/>
+            <data android:mimeType="image/*"/>
+        </intent>
+    </queries>
 
     <application>
         <provider
@@ -25,27 +42,71 @@
             android:name="com.google.android.apps.muzei.gallery.GalleryProvider"
             android:exported="false"
             android:grantUriPermissions="true"/>
-        <service android:name="com.google.android.apps.muzei.gallery.GalleryArtSource"
-                 android:label="@string/gallery_title"
-                 android:description="@string/gallery_description"
-                 android:icon="@drawable/gallery_ic_source">
+
+        <provider
+            android:name="com.google.android.apps.muzei.gallery.GalleryArtProvider"
+            android:authorities="${galleryArtAuthority}"
+            android:icon="@drawable/gallery_ic_launcher"
+            android:label="@string/gallery_title"
+            android:description="@string/gallery_description"
+            android:permission="com.google.android.apps.muzei.api.ACCESS_PROVIDER">
             <intent-filter>
-                <action android:name="com.google.android.apps.muzei.api.MuzeiArtSource" />
+                <action android:name="com.google.android.apps.muzei.api.MuzeiArtProvider" />
             </intent-filter>
-            <meta-data android:name="settingsActivity"
-                       android:value="com.google.android.apps.muzei.gallery.GallerySettingsActivity" />
-            <meta-data android:name="setupActivity"
-                       android:value="com.google.android.apps.muzei.gallery.GallerySetupActivity" />
-            <meta-data android:name="color" android:value="#4db6ac" />
+
+            <meta-data
+                android:name="settingsActivity"
+                android:value="com.google.android.apps.muzei.gallery.GallerySettingsActivity" />
+            <meta-data
+                android:name="setupActivity"
+                android:value="com.google.android.apps.muzei.gallery.GallerySetupActivity" />
+        </provider>
+        <provider
+            android:name="com.google.android.apps.muzei.gallery.GalleryArtDocumentsProvider"
+            android:authorities="${galleryArtAuthority}.documents"
+            android:exported="true"
+            android:grantUriPermissions="true"
+            android:permission="android.permission.MANAGE_DOCUMENTS">
+            <intent-filter>
+                <action android:name="android.content.action.DOCUMENTS_PROVIDER" />
+            </intent-filter>
+        </provider>
+        <service
+            android:name="com.google.android.apps.muzei.gallery.GalleryArtSource"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="com.google.android.apps.muzei.api.MuzeiArtSource"/>
+            </intent-filter>
+            <meta-data
+                android:name="replacement"
+                android:value="com.google.android.apps.muzei.gallery.art" />
         </service>
 
-        <activity android:name="com.google.android.apps.muzei.gallery.GallerySetupActivity"
-                  android:label="@string/gallery_title"
-                  android:theme="@android:style/Theme.Translucent.NoTitleBar"
-                  android:exported="true" />
+        <activity
+            android:name="com.google.android.apps.muzei.gallery.GallerySetupActivity"
+            android:label="@string/gallery_title"
+            android:theme="@android:style/Theme.Translucent.NoTitleBar"
+            android:exported="true"/>
 
-        <activity android:name="com.google.android.apps.muzei.gallery.GallerySettingsActivity"
-                  android:label="@string/gallery_title"
-                  android:theme="@style/Theme.Gallery" />
+        <activity
+            android:name="com.google.android.apps.muzei.gallery.GallerySettingsActivity"
+            android:label="@string/gallery_title"
+            android:theme="@style/Theme.Gallery"/>
+
+        <activity
+            android:name="com.google.android.apps.muzei.gallery.GalleryAddPhotosActivity"
+            android:label="@string/gallery_title"
+            android:theme="@android:style/Theme.Translucent.NoTitleBar"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.SEND"/>
+                <action android:name="android.intent.action.SEND_MULTIPLE"/>
+
+                <category android:name="android.intent.category.DEFAULT"/>
+                <category android:name="android.intent.category.BROWSABLE"/>
+
+                <data android:mimeType="image/*"/>
+            </intent-filter>
+        </activity>
     </application>
 </manifest>

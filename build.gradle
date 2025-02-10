@@ -16,39 +16,28 @@
 
 buildscript {
     repositories {
-        jcenter()
         google()
-        maven {
-            url 'https://maven.fabric.io/public'
-        }
+        mavenCentral()
     }
+
     dependencies {
-        classpath 'com.android.tools.build:gradle:3.0.1'
-        classpath 'com.google.gms:google-services:3.1.0'
-        classpath 'io.fabric.tools:gradle:1.24.4'
-        classpath 'com.google.firebase:firebase-plugins:1.1.1'
+        classpath libs.agp
+        classpath libs.googleservices
+        classpath libs.firebase.crashlytics.gradle
+        classpath libs.firebase.perf.plugin
+        classpath libs.dokka
+        classpath libs.kotlin
+        classpath libs.navigation.safeargs
     }
+}
+
+plugins {
+    id "com.google.devtools.ksp" version libs.versions.ksp
 }
 
 allprojects {
     repositories {
-        jcenter()
         google()
+        mavenCentral()
     }
-}
-
-ext {
-    compileSdkVersion = 27
-    targetSdkVersion = 25
-
-    supportLibraryVersion = "27.0.2"
-    constraintLayoutVersion = "1.0.2"
-    lifecycleVersion = "1.0.0"
-    roomVersion = "1.0.0"
-    pagingVersion = "1.0.0-alpha4-1"
-    googlePlayServicesVersion = "11.8.0"
-    crashlyticsVersion = "2.8.0"
-    wearableVersion = "2.1.0"
-    okhttpVersion = "3.9.1"
-    picassoVersion = "2.5.2"
 }

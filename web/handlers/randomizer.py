@@ -14,10 +14,13 @@
 
 from datetime import datetime, date, timedelta
 import json
+import logging
 import os
 import re
 import sys
 import random
+
+from google.appengine.api import urlfetch
 
 from handlers import backroomarthelper
 from handlers.common import *
@@ -35,7 +38,15 @@ def artwork_key(details_url):
 
 class PickRandomArtworkTaskHandler(BaseHandler):
   def get(self):
-    ARTWORKS = json.loads(open(os.path.join(os.path.split(__file__)[0], 'lt-artworks.json')).read())
+    lt_artworks_url = open(os.path.join(os.path.split(__file__)[0], 'lt-artworks-url.txt')).read()
+    lt_result = urlfetch.fetch(lt_artworks_url)
+    if lt_result.status_code < 200 or lt_result.status_code >= 300:
+      raise IOError('Error downloading latest artworks JSON: HTTP %d.' % lt_result.status_code)
+    lt_artworks_json = lt_result.content
+
+    ARTWORKS = json.loads(lt_artworks_json)
+
+    # ARTWORKS = filter(lambda a: '_stars' in a and a['_stars'] >= 1, ARTWORKS)
 
     # Fetch latest 300 artworks (for blacklisting)
     latest_artworks = (FeaturedArtwork.all()
@@ -52,32 +63,83 @@ class PickRandomArtworkTaskHandler(BaseHandler):
     # Create a blacklist of keys to avoid repeats
     blacklist = set(artwork_key(a.details_url) for a in latest_artworks)
 
-    self.response.out.write('starting blacklist size: %d<br>' % len(blacklist))
+    logging.debug('starting blacklist size: %d' % len(blacklist))
+
+    chosen_artworks = []
 
     for target_date in target_dates:
       # Pick from available artworks, excluding artwork in the blacklist
       random_artwork = None
       while True:
+        if len(ARTWORKS) == 0:
+          logging.error('Ran out of artworks to choose from, cannot continue')
+          return
+
         random_artwork = random.choice(ARTWORKS)
         key = artwork_key(random_artwork['detailsUri'])
         if key not in blacklist:
-          # Once chosen, add to the blacklist to avoid repeats within the lookahead
-          blacklist.add(key)
+          # Once chosen, remove it from the list of artworks to choose next
+          ARTWORKS.remove(random_artwork)
+          chosen_artworks.append(random_artwork)
           break
 
       target_details_url = str(random_artwork['detailsUri'])
-      self.response.out.write('%(date)s: setting to <b>%(url)s</b><br>' % dict(url=target_details_url, date=target_date))
+      logging.debug('%(date)s: setting to %(url)s' % dict(url=target_details_url, date=target_date))
 
       # Store the new artwork
-      new_artwork = FeaturedArtwork(
-          title=random_artwork['title'],
-          byline=random_artwork['byline'],
-          attribution=random_artwork['attribution'],
-          image_url=random_artwork['imageUri'],
-          thumb_url=random_artwork['thumbUri'],
-          details_url=random_artwork['detailsUri'],
-          publish_date=target_date)
-      new_artwork.save()
+      if self.request.get('dry-run', '') != 'true':
+        new_artwork = FeaturedArtwork(
+            title=random_artwork['title'],
+            byline=random_artwork['byline'],
+            attribution=random_artwork['attribution'],
+            image_url=random_artwork['imageUri'],
+            thumb_url=random_artwork['thumbUri'],
+            details_url=random_artwork['detailsUri'],
+            publish_date=target_date)
+        new_artwork.save()
+
+    if self.request.get('output', '') == 'html':
+      self.response.out.write(get_html(artworks_json=json.dumps(chosen_artworks)))
 
     # Finish up
-    self.response.out.write('done<br>')
+    logging.debug('done')
+
+
+def get_html(**kwargs):
+  return '''
+<!doctype html>
+<body>
+
+<style>
+
+body {
+  margin: 64px;
+  display: flex;
+  flex-flow: row wrap;
+}
+
+img {
+  width: 128px;
+  height: 128px;
+  object-fit: cover;
+  object-position: 50%% 50%%;
+  margin: 4px;
+}
+
+</style>
+
+<script>
+
+let ARTWORKS = %(artworks_json)s;
+
+ARTWORKS.forEach(artwork => {
+  let img = document.createElement('img');
+  img.setAttribute('src', artwork.thumbUri);
+  document.body.appendChild(img);
+});
+
+</script>
+
+</body>
+</html>
+''' % kwargs
